@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>String Art Web App</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="container">
+    <h1>Générateur String Art</h1>
+    <form method="post" action="/generate" enctype="multipart/form-data" class="card">
+      <label>Image source
+        <input type="file" name="image" accept="image/*" required>
+      </label>
+
+      <div class="grid">
+        <label>Nombre de clous
+          <input type="number" name="nails" min="40" max="400" value="{{ config.nails if config else 200 }}">
+        </label>
+        <label>Nombre de fils
+          <input type="number" name="lines" min="50" max="4000" value="{{ config.lines if config else 1200 }}">
+        </label>
+        <label>Taille de rendu (px)
+          <input type="number" name="size" min="300" max="1000" value="{{ config.size if config else 700 }}">
+        </label>
+      </div>
+
+      <label class="row">
+        <input type="checkbox" name="color_mode" {% if config and config.color_mode %}checked{% endif %}> Activer le string art couleur (rouge/vert/bleu)
+      </label>
+
+      <button type="submit">Générer l'aperçu</button>
+      {% if result_b64 %}
+      <a class="btn-secondary" href="/export-pdf">Exporter en PDF</a>
+      {% endif %}
+    </form>
+
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    {% endif %}
+
+    {% if result_b64 %}
+    <section class="results">
+      <article>
+        <h2>Aperçu final</h2>
+        <img src="data:image/png;base64,{{ result_b64 }}" alt="Aperçu string art">
+      </article>
+      <article>
+        <h2>Schéma avec clous numérotés</h2>
+        <img src="data:image/png;base64,{{ schema_b64 }}" alt="Schéma clous">
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>Ordre des fils ({{ total_instructions }} au total)</h2>
+      <ol>
+        {% for start, end, color in instructions %}
+          <li>Clou {{ start }} → Clou {{ end }} ({{ color }})</li>
+        {% endfor %}
+      </ol>
+      {% if total_instructions > instructions|length %}
+      <p>Affichage limité aux 200 premières instructions (télécharge le PDF pour plus).</p>
+      {% endif %}
+    </section>
+    {% endif %}
+  </main>
+</body>
+</html>

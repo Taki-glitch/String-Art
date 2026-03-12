@@ -1,16 +1,24 @@
-# String-Art
-Création d’un programme pour faire du string art (art avec des fils)
+# String-Art Web App
 
-Le programme fonctionne comme les générateurs de String Art :
-	1.	Tu fournis une image (portrait, logo, paysage…)
-	2.	Le programme :
-	•	convertit l’image en noir et blanc
-	•	place des clous autour d’un cercle
-	•	calcule les meilleures lignes entre les clous
-	3.	Il génère :
-	•	une image finale
-	•	une liste des fils à tendre dans l’ordre
+Application web Flask pour créer des plans de string art à partir d'une image.
 
-Ensuite tu peux :
-	•	planter les clous
-	•	suivre la liste des fils
+## Fonctionnalités
+
+- Upload d'image depuis l'interface web
+- Paramètres configurables (nombre de clous, nombre de fils, taille)
+- Aperçu du rendu string art
+- Schéma avec clous numérotés
+- Liste ordonnée des fils à tendre
+- Export PDF (schéma + aperçu + ordre des fils + numéros de clous)
+- Mode couleur (fils rouge / vert / bleu)
+
+## Lancer en local
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
+Puis ouvrir http://localhost:5000
