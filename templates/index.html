@@ -86,6 +86,25 @@
     </section>
 
     <section class="card">
+      <h2>Animation fil par fil</h2>
+      <canvas id="animation-canvas" width="{{ config.size }}" height="{{ config.size }}"></canvas>
+      <div class="grid" style="margin-top:10px;">
+        <label>Vitesse (fils/s)
+          <input id="speed-input" type="number" min="1" max="240" value="45">
+        </label>
+        <label>Position animation
+          <input id="progress-input" type="range" min="0" max="{{ total_instructions }}" value="0">
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" id="play-btn">▶️ Lecture</button>
+        <button type="button" id="pause-btn" class="preset-btn">⏸️ Pause</button>
+        <button type="button" id="reset-btn" class="btn-secondary">↺ Réinitialiser</button>
+      </div>
+      <p id="animation-status">0 / {{ total_instructions }} fils tracés</p>
+    </section>
+
+    <section class="card">
       <h2>Ordre des fils ({{ total_instructions }} au total)</h2>
       <ol>
         {% for start, end, color in instructions %}
@@ -100,6 +119,46 @@
   </main>
 
   <script>
+    const constrain = (val, min, max) => (val < min ? min : (val > max ? max : val));
+    const map = (value, x1, y1, x2, y2) => (value - x1) * (y2 - x2) / (y1 - x1) + x2;
+
+    class Color {
+      constructor(r, g, b, a = 1) {
+        this.r = r;
+        this.g = g;
+        this.b = b;
+        this.a = a;
+      }
+
+      toRgba(alphaScale = 1) {
+        return `rgba(${this.r}, ${this.g}, ${this.b}, ${constrain(this.a * alphaScale, 0, 1)})`;
+      }
+    }
+
+    class Point {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+      }
+    }
+
+    class Line {
+      constructor(start, end, color) {
+        this.start = start;
+        this.end = end;
+        this.color = color;
+      }
+
+      draw(ctx, alphaScale = 1) {
+        ctx.beginPath();
+        ctx.moveTo(this.start.x, this.start.y);
+        ctx.lineTo(this.end.x, this.end.y);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = this.color.toRgba(alphaScale);
+        ctx.stroke();
+      }
+    }
+
     const imageInput = document.getElementById('image-input');
     const previewWrap = document.getElementById('source-preview-wrap');
     const previewImg = document.getElementById('source-preview');
@@ -145,6 +204,7 @@
     };
 
     document.querySelectorAll('.preset-btn').forEach((btn) => {
+      if (!btn.dataset.preset) return;
       btn.addEventListener('click', () => {
         const preset = presets[btn.dataset.preset];
         if (!preset) return;
@@ -158,6 +218,119 @@
     });
 
     refreshSummary();
+
+    const canvas = document.getElementById('animation-canvas');
+    const statusEl = document.getElementById('animation-status');
+    const playBtn = document.getElementById('play-btn');
+    const pauseBtn = document.getElementById('pause-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const speedInput = document.getElementById('speed-input');
+    const progressInput = document.getElementById('progress-input');
+
+    if (canvas && statusEl && playBtn && pauseBtn && resetBtn && speedInput && progressInput) {
+      const ctx = canvas.getContext('2d');
+      const instructions = {{ (all_instructions or [])|tojson }};
+      const points = ({{ (nail_points or [])|tojson }}).map(([x, y]) => new Point(x, y));
+      const colorMap = {
+        noir: new Color(20, 20, 20, 0.15),
+        rouge: new Color(190, 32, 46, 0.15),
+        vert: new Color(52, 128, 68, 0.15),
+        bleu: new Color(40, 90, 170, 0.15),
+      };
+
+      const lineObjects = instructions.map(([start, end, color]) => {
+        return new Line(points[start], points[end], colorMap[color] || colorMap.noir);
+      });
+
+      let index = 0;
+      let running = false;
+      let accumulator = 0;
+      let lastTs;
+
+      function drawNails() {
+        ctx.fillStyle = '#f4eee1';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const nailRadius = constrain(map(points.length, 40, 320, 2.8, 1.7), 1.6, 2.8);
+        points.forEach((p) => {
+          ctx.beginPath();
+          ctx.fillStyle = '#4f4f4f';
+          ctx.arc(p.x, p.y, nailRadius, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
+
+      function redrawTo(targetIndex) {
+        drawNails();
+        for (let i = 0; i < targetIndex; i += 1) {
+          lineObjects[i].draw(ctx, 1);
+        }
+      }
+
+      function updateStatus() {
+        statusEl.textContent = `${index} / ${instructions.length} fils tracés`;
+        progressInput.value = String(index);
+      }
+
+      function resetAnimation() {
+        index = 0;
+        running = false;
+        accumulator = 0;
+        lastTs = undefined;
+        redrawTo(index);
+        updateStatus();
+      }
+
+      function tick(ts) {
+        if (!running) return;
+        if (lastTs === undefined) lastTs = ts;
+        const delta = (ts - lastTs) / 1000;
+        lastTs = ts;
+        accumulator += delta;
+
+        const speed = constrain(Number(speedInput.value) || 1, 1, 240);
+        const stepDuration = 1 / speed;
+
+        while (accumulator >= stepDuration && index < lineObjects.length) {
+          lineObjects[index].draw(ctx, 1);
+          index += 1;
+          accumulator -= stepDuration;
+        }
+
+        updateStatus();
+        if (index >= lineObjects.length) {
+          running = false;
+          return;
+        }
+
+        requestAnimationFrame(tick);
+      }
+
+      playBtn.addEventListener('click', () => {
+        if (index >= lineObjects.length) {
+          resetAnimation();
+        }
+        if (!running) {
+          running = true;
+          requestAnimationFrame(tick);
+        }
+      });
+
+      pauseBtn.addEventListener('click', () => {
+        running = false;
+      });
+
+      resetBtn.addEventListener('click', resetAnimation);
+
+      progressInput.addEventListener('input', (event) => {
+        running = false;
+        index = constrain(Number(event.target.value) || 0, 0, lineObjects.length);
+        redrawTo(index);
+        updateStatus();
+      });
+
+      resetAnimation();
+    }
   </script>
 </body>
 </html>
