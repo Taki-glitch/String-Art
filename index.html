@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>String Art - Accès rapide</title>
+  <style>
+    body{font-family:Arial,sans-serif;background:#f3f6ff;margin:0;color:#1f2937}
+    .wrap{max-width:760px;margin:60px auto;padding:24px}
+    .card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 8px 24px rgba(0,0,0,.08)}
+    .btn{display:inline-block;background:#3559e0;color:#fff;text-decoration:none;padding:10px 14px;border-radius:8px;margin:6px 8px 0 0}
+    .muted{color:#5b6474}
+    code{background:#eef2ff;padding:2px 6px;border-radius:6px}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <h1>String Art Web App</h1>
+      <p class="muted">Ce lien GitHub Pages est une page d’entrée. L’application complète (upload, génération, aperçu, export PDF) nécessite un serveur Flask.</p>
+      <p>➡️ Si vous avez déjà déployé l’application (Render/Railway), ajoutez l’URL dans le fichier <code>index.html</code> (constante <code>DEPLOYED_APP_URL</code> ci-dessous).</p>
+      <div>
+        <a class="btn" id="open-app" href="#">Ouvrir l'application</a>
+        <a class="btn" href="./README.md">Voir la doc de déploiement</a>
+      </div>
+      <p id="status" class="muted" style="margin-top:12px"></p>
+    </section>
+  </main>
+
+  <script>
+    const DEPLOYED_APP_URL = ""; // ex: "https://string-art-web.onrender.com"
+    const openBtn = document.getElementById('open-app');
+    const status = document.getElementById('status');
+
+    if (DEPLOYED_APP_URL) {
+      openBtn.href = DEPLOYED_APP_URL;
+      status.textContent = `Lien configuré : ${DEPLOYED_APP_URL}`;
+    } else {
+      openBtn.removeAttribute('href');
+      openBtn.style.opacity = '0.6';
+      openBtn.style.cursor = 'not-allowed';
+      status.textContent = "Aucun backend public configuré. Déployez d'abord l'app Flask (voir README), puis renseignez DEPLOYED_APP_URL.";
+    }
+  </script>
+</body>
+</html>
