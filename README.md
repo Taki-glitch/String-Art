@@ -1,15 +1,16 @@
 # String-Art Web App
 
-Application web Flask pour créer des plans de string art à partir d'une image.
+Application web Flask pour créer directement un string art depuis une image uploadée.
 
 ## Fonctionnalités
 
 - Upload d'image depuis l'interface web
 - Paramètres configurables (nombre de clous, nombre de fils, taille)
-- Aperçu du rendu string art
+- Génération directe du string art avec aperçu
 - Schéma avec clous numérotés
 - Liste ordonnée des fils à tendre
-- Export PDF (schéma + aperçu + ordre des fils + numéros de clous)
+- Export PDF complet (schéma + aperçu + ordre des fils)
+- Téléchargement image PNG et instructions TXT
 - Mode couleur (fils rouge / vert / bleu)
 
 ## Lancer en local

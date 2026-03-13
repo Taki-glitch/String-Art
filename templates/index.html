@@ -9,6 +9,8 @@
 <body>
   <main class="container">
     <h1>Générateur String Art</h1>
+    <p class="subtitle">Upload une image, ajuste les paramètres, puis lance la génération directement depuis le site.</p>
+
     <form method="post" action="/generate" enctype="multipart/form-data" class="card">
       <label>Image source
         <input type="file" name="image" accept="image/*" required>
@@ -16,10 +18,10 @@
 
       <div class="grid">
         <label>Nombre de clous
-          <input type="number" name="nails" min="40" max="400" value="{{ config.nails if config else 200 }}">
+          <input type="number" name="nails" min="40" max="320" value="{{ config.nails if config else 160 }}">
         </label>
         <label>Nombre de fils
-          <input type="number" name="lines" min="50" max="4000" value="{{ config.lines if config else 1200 }}">
+          <input type="number" name="lines" min="50" max="5000" value="{{ config.lines if config else 900 }}">
         </label>
         <label>Taille de rendu (px)
           <input type="number" name="size" min="300" max="1000" value="{{ config.size if config else 700 }}">
@@ -30,9 +32,11 @@
         <input type="checkbox" name="color_mode" {% if config and config.color_mode %}checked{% endif %}> Activer le string art couleur (rouge/vert/bleu)
       </label>
 
-      <button type="submit">Générer l'aperçu</button>
+      <button type="submit">Créer le String Art</button>
       {% if result_b64 %}
-      <a class="btn-secondary" href="/export-pdf">Exporter en PDF</a>
+      <a class="btn-secondary" href="/export-pdf">Exporter PDF</a>
+      <a class="btn-secondary" href="/download-image">Télécharger l'image</a>
+      <a class="btn-secondary" href="/download-instructions">Télécharger les instructions</a>
       {% endif %}
     </form>
 
@@ -42,11 +46,11 @@
 
     {% if result_b64 %}
     <section class="results">
-      <article>
+      <article class="card">
         <h2>Aperçu final</h2>
         <img src="data:image/png;base64,{{ result_b64 }}" alt="Aperçu string art">
       </article>
-      <article>
+      <article class="card">
         <h2>Schéma avec clous numérotés</h2>
         <img src="data:image/png;base64,{{ schema_b64 }}" alt="Schéma clous">
       </article>
@@ -60,7 +64,7 @@
         {% endfor %}
       </ol>
       {% if total_instructions > instructions|length %}
-      <p>Affichage limité aux 200 premières instructions (télécharge le PDF pour plus).</p>
+      <p>Affichage limité aux 300 premières instructions. Le PDF et le TXT contiennent la liste complète.</p>
       {% endif %}
     </section>
     {% endif %}
