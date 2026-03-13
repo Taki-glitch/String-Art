@@ -85,6 +85,10 @@ def _generate_single_channel(
     target = target_gray.astype(np.float32)
     current_canvas = np.full_like(target, 255, dtype=np.float32)
     instructions: List[Tuple[int, int, str]] = []
+    current_nail = 0
+    nail_count = len(points)
+    used_pairs: Dict[Tuple[int, int], int] = {}
+    previous_nail = None
 
     current_nail = 0
     nail_count = len(points)
