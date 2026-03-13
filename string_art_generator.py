@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 
 @dataclass
@@ -29,11 +29,13 @@ LineCache = Dict[Tuple[int, int], Tuple[np.ndarray, np.ndarray]]
 def decode_image(image_bytes: bytes, size: int) -> np.ndarray:
     try:
         with Image.open(io.BytesIO(image_bytes)) as source:
-            img = source.convert("RGB").resize((size, size), Image.Resampling.LANCZOS)
+            rgb = source.convert("RGB")
+            square = ImageOps.fit(rgb, (size, size), method=Image.Resampling.LANCZOS)
+            enhanced = ImageOps.autocontrast(square, cutoff=1)
     except Exception as exc:
         raise ValueError("Impossible de lire l'image fournie.") from exc
 
-    return np.array(img, dtype=np.uint8)
+    return np.array(enhanced, dtype=np.uint8)
 
 
 def create_circle_points(nails: int, size: int) -> List[Tuple[int, int]]:
@@ -79,16 +81,18 @@ def _generate_single_channel(
     instructions: List[Tuple[int, int, str]] = []
     current_nail = 0
     nail_count = len(points)
+    used_pairs: Dict[Tuple[int, int], int] = {}
+    previous_nail = None
 
     for _ in range(lines):
-        need = np.clip(target_darkness - rendered_darkness, 0, 255)
-
-        best_score = 1.0
+        best_score = 0.0
         best_pair = None
-        min_distance = max(2, nail_count // 40)
+        min_distance = max(2, nail_count // 42)
+
         for candidate in range(nail_count):
-            if candidate == current_nail:
+            if candidate == current_nail or candidate == previous_nail:
                 continue
+
             circular_distance = abs(candidate - current_nail)
             circular_distance = min(circular_distance, nail_count - circular_distance)
             if circular_distance <= min_distance:
@@ -99,8 +103,18 @@ def _generate_single_channel(
                 continue
 
             ys, xs = line_cache[pair]
-            score = float(np.sum(need[ys, xs]))
-            score -= float(np.sum(rendered_darkness[ys, xs])) * 0.12
+            current_abs_error = np.abs(target_darkness[ys, xs] - rendered_darkness[ys, xs])
+            next_rendered = np.minimum(255, rendered_darkness[ys, xs] + line_weight)
+            next_abs_error = np.abs(target_darkness[ys, xs] - next_rendered)
+            improvement = float(np.sum(current_abs_error - next_abs_error))
+
+            if improvement <= 0:
+                continue
+
+            repetition_penalty = used_pairs.get(pair, 0) * 12.0
+            crossing_penalty = float(np.sum(np.maximum(0, rendered_darkness[ys, xs] - target_darkness[ys, xs]))) * 0.08
+            score = improvement - repetition_penalty - crossing_penalty
+
             if score > best_score:
                 best_score = score
                 best_pair = pair
@@ -111,6 +125,8 @@ def _generate_single_channel(
         ys, xs = line_cache[best_pair]
         rendered_darkness[ys, xs] = np.minimum(255, rendered_darkness[ys, xs] + line_weight)
         instructions.append((best_pair[0], best_pair[1], color_name))
+        used_pairs[best_pair] = used_pairs.get(best_pair, 0) + 1
+        previous_nail = current_nail
         current_nail = best_pair[1] if best_pair[0] == current_nail else best_pair[0]
 
     canvas = np.clip(255 - rendered_darkness, 0, 255).astype(np.uint8)
@@ -129,7 +145,7 @@ def generate_string_art(image_bytes: bytes, config: GenerationConfig) -> Generat
 
     if not config.color_mode:
         gray = np.dot(source[..., :3], [0.299, 0.587, 0.114]).astype(np.uint8)
-        canvas, steps = _generate_single_channel(
+        _, steps = _generate_single_channel(
             gray,
             points,
             config.lines,
@@ -143,10 +159,9 @@ def generate_string_art(image_bytes: bytes, config: GenerationConfig) -> Generat
     split_lines = max(1, config.lines // 3)
     channels = [("rouge", source[:, :, 0]), ("vert", source[:, :, 1]), ("bleu", source[:, :, 2])]
 
-    rendered_channels: List[np.ndarray] = []
-    instructions: List[Tuple[int, int, str]] = []
+    channel_steps: List[List[Tuple[int, int, str]]] = []
     for color_name, channel in channels:
-        channel_canvas, steps = _generate_single_channel(
+        _, steps = _generate_single_channel(
             channel,
             points,
             split_lines,
@@ -154,8 +169,15 @@ def generate_string_art(image_bytes: bytes, config: GenerationConfig) -> Generat
             color_name,
             line_cache,
         )
-        rendered_channels.append(channel_canvas)
-        instructions.extend(steps)
+        channel_steps.append(steps)
+
+    instructions: List[Tuple[int, int, str]] = []
+    channel_index = 0
+    while any(channel_steps):
+        current_steps = channel_steps[channel_index]
+        if current_steps:
+            instructions.append(current_steps.pop(0))
+        channel_index = (channel_index + 1) % len(channel_steps)
 
     result_img = render_realistic_string_art(points, instructions, config.size)
     return GenerationResult(result_img, instructions, points)
@@ -174,20 +196,20 @@ def render_realistic_string_art(
     thread_layer = Image.new("RGBA", (large_size, large_size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(thread_layer, "RGBA")
     color_map = {
-        "noir": (20, 20, 20, 18),
-        "rouge": (190, 32, 46, 18),
-        "vert": (52, 128, 68, 18),
-        "bleu": (40, 90, 170, 18),
+        "noir": (20, 20, 20, 17),
+        "rouge": (190, 32, 46, 17),
+        "vert": (52, 128, 68, 17),
+        "bleu": (40, 90, 170, 17),
     }
 
     for start, end, color in instructions:
         draw.line(
             (scale_points[start], scale_points[end]),
-            fill=color_map.get(color, (20, 20, 20, 18)),
+            fill=color_map.get(color, (20, 20, 20, 17)),
             width=max(1, supersample),
         )
 
-    softened = thread_layer.filter(ImageFilter.GaussianBlur(radius=0.8 * supersample))
+    softened = thread_layer.filter(ImageFilter.GaussianBlur(radius=0.7 * supersample))
     combined = Image.alpha_composite(base, softened)
     combined = Image.alpha_composite(combined, thread_layer)
 
