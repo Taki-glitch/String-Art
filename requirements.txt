@@ -1,5 +1,5 @@
 flask
-opencv-python
+gunicorn
 numpy
 pillow
 reportlab

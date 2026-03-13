@@ -3,7 +3,6 @@ import math
 from dataclasses import dataclass
 from typing import Dict, List, Sequence, Tuple
 
-import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -28,11 +27,13 @@ LineCache = Dict[Tuple[int, int], Tuple[np.ndarray, np.ndarray]]
 
 
 def decode_image(image_bytes: bytes, size: int) -> np.ndarray:
-    array = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(array, cv2.IMREAD_COLOR)
-    if img is None:
-        raise ValueError("Impossible de lire l'image fournie.")
-    return cv2.resize(img, (size, size), interpolation=cv2.INTER_AREA)
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as source:
+            img = source.convert("RGB").resize((size, size), Image.Resampling.LANCZOS)
+    except Exception as exc:
+        raise ValueError("Impossible de lire l'image fournie.") from exc
+
+    return np.array(img, dtype=np.uint8)
 
 
 def create_circle_points(nails: int, size: int) -> List[Tuple[int, int]]:
@@ -55,8 +56,9 @@ def _precompute_line_pixels(points: Sequence[Tuple[int, int]], size: int) -> Lin
     cache: LineCache = {}
     for i in range(len(points)):
         for j in range(i + 1, len(points)):
-            mask = np.zeros((size, size), dtype=np.uint8)
-            cv2.line(mask, points[i], points[j], 1, 1)
+            mask_img = Image.new("L", (size, size), 0)
+            ImageDraw.Draw(mask_img).line((points[i], points[j]), fill=1, width=1)
+            mask = np.array(mask_img, dtype=np.uint8)
             ys, xs = np.where(mask == 1)
             if len(xs) > 0:
                 cache[(i, j)] = (ys, xs)
@@ -109,7 +111,7 @@ def generate_string_art(image_bytes: bytes, config: GenerationConfig) -> Generat
     line_cache = _precompute_line_pixels(points, config.size)
 
     if not config.color_mode:
-        gray = cv2.cvtColor(source, cv2.COLOR_BGR2GRAY)
+        gray = np.dot(source[..., :3], [0.299, 0.587, 0.114]).astype(np.uint8)
         canvas, steps = _generate_single_channel(
             gray,
             points,
@@ -121,9 +123,8 @@ def generate_string_art(image_bytes: bytes, config: GenerationConfig) -> Generat
         result_img = Image.fromarray(canvas).convert("RGB")
         return GenerationResult(result_img, steps, points)
 
-    rgb = cv2.cvtColor(source, cv2.COLOR_BGR2RGB)
     split_lines = max(1, config.lines // 3)
-    channels = [("rouge", rgb[:, :, 0]), ("vert", rgb[:, :, 1]), ("bleu", rgb[:, :, 2])]
+    channels = [("rouge", source[:, :, 0]), ("vert", source[:, :, 1]), ("bleu", source[:, :, 2])]
 
     rendered_channels: List[np.ndarray] = []
     instructions: List[Tuple[int, int, str]] = []
