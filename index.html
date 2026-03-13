@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>String Art Studio (100% navigateur)</title>
+  <link rel="stylesheet" href="./static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <main class="container">
+    <header class="hero card">
+      <h1>String Art Studio</h1>
+      <p class="subtitle">Version 100% navigateur : aucun serveur requis. Upload, paramètres, aperçu, export PNG/TXT/PDF.</p>
+    </header>
+
+    <section class="card form-card">
+      <div class="field-block">
+        <label for="image-input">Image source</label>
+        <input id="image-input" type="file" accept="image/*">
+        <p class="help">Conseil perf: commence avec 120-180 clous et 600-1200 fils.</p>
+      </div>
+
+      <section class="source-preview hidden" id="source-preview-wrap">
+        <h2>Aperçu image source</h2>
+        <img id="source-preview" alt="Aperçu source">
+      </section>
+
+      <section class="field-block">
+        <h2>Préréglages rapides</h2>
+        <div class="preset-row">
+          <button class="preset-btn" type="button" data-preset="fast">Rapide</button>
+          <button class="preset-btn" type="button" data-preset="balanced">Équilibré</button>
+          <button class="preset-btn" type="button" data-preset="detailed">Détaillé</button>
+          <button class="preset-btn" type="button" data-preset="color">Couleur</button>
+        </div>
+      </section>
+
+      <section class="grid">
+        <label>Nombre de clous
+          <input id="nails" type="number" min="40" max="280" value="160">
+        </label>
+        <label>Nombre de fils
+          <input id="lines" type="number" min="50" max="4000" value="900">
+        </label>
+        <label>Taille de rendu (px)
+          <input id="size" type="number" min="300" max="1000" value="700">
+        </label>
+        <label>Épaisseur visuelle
+          <input id="line-weight" type="number" min="4" max="40" value="16">
+        </label>
+      </section>
+
+      <label class="row">
+        <input id="color-mode" type="checkbox"> Activer le mode couleur (rouge/vert/bleu)
+      </label>
+
+      <div class="summary-box">
+        <strong>Résumé:</strong> <span id="summary-text">160 clous · 900 fils · 700px · épaisseur 16</span>
+      </div>
+
+      <div class="actions">
+        <button id="generate-btn" type="button">Générer</button>
+        <button id="cancel-btn" type="button" class="btn-secondary">Annuler</button>
+        <button id="export-png-btn" type="button" class="btn-secondary">Exporter PNG</button>
+        <button id="export-txt-btn" type="button" class="btn-secondary">Exporter TXT</button>
+        <button id="export-pdf-btn" type="button" class="btn-secondary">Exporter PDF</button>
+      </div>
+
+      <div class="progress-wrap">
+        <progress id="progress" max="100" value="0"></progress>
+        <p id="status" class="help">Prêt.</p>
+      </div>
+    </section>
+
+    <section class="results">
+      <article class="card">
+        <h2>Aperçu final</h2>
+        <canvas id="result-canvas" width="700" height="700"></canvas>
+      </article>
+      <article class="card">
+        <h2>Schéma clous</h2>
+        <canvas id="schema-canvas" width="700" height="700"></canvas>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>Ordre des fils (<span id="steps-count">0</span>)</h2>
+      <ol id="instructions-list"></ol>
+    </section>
+  </main>
+
+  <script src="./static/webapp.js"></script>
+</body>
+</html>

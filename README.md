@@ -1,25 +1,36 @@
-# String-Art Web App
+# String-Art Web App (100% navigateur)
 
-Application web Flask pour créer directement un string art depuis une image uploadée.
+Application de string art utilisable directement depuis un site statique (GitHub Pages), sans backend Render.
 
-## Fonctionnalités
+## Ce que vous obtenez
 
-- Upload d'image depuis l'interface web
-- Paramètres configurables (nombre de clous, nombre de fils, taille)
-- Génération directe du string art avec aperçu
-- Schéma avec clous numérotés
-- Liste ordonnée des fils à tendre
-- Export PDF complet (schéma + aperçu + ordre des fils)
-- Téléchargement image PNG et instructions TXT
-- Mode couleur (fils rouge / vert / bleu)
+- Upload d'image
+- Réglages complets : clous, fils, taille, épaisseur, mode couleur
+- Préréglages rapides (Rapide / Équilibré / Détaillé / Couleur)
+- Génération dans le navigateur
+- Aperçu final + schéma clous
+- Liste des instructions
+- Exports : PNG / TXT / PDF
+- Bouton annuler pendant la génération
 
-## Lancer en local
+## Utilisation simple (sans serveur)
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python app.py
-```
+1. Ouvrez `index.html` (ou activez GitHub Pages sur le repo).
+2. Chargez une image.
+3. Ajustez les paramètres.
+4. Cliquez sur **Générer**.
+5. Exportez le résultat.
 
-Puis ouvrir http://localhost:5000
+## Performance
+
+La génération se fait entièrement dans le navigateur (CPU local).
+Si votre machine est lente, réduisez :
+- nombre de clous
+- nombre de fils
+- taille de rendu
+
+Préréglage recommandé pour commencer : **Équilibré**.
+
+## Option Flask locale (facultative)
+
+Le backend Flask du repo existe encore pour un usage local, mais n'est plus nécessaire pour l'usage GitHub Pages.
