@@ -52,6 +52,7 @@ def generate():
         nails=_safe_int(request.form.get("nails"), 160, 40, 320),
         lines=_safe_int(request.form.get("lines"), 900, 50, 5000),
         size=_safe_int(request.form.get("size"), 700, 300, 1000),
+        line_weight=_safe_int(request.form.get("line_weight"), 18, 5, 50),
         color_mode=request.form.get("color_mode") == "on",
     )
 

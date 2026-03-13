@@ -1,7 +1,7 @@
 body {
   font-family: Arial, sans-serif;
   margin: 0;
-  background: #f3f5fa;
+  background: linear-gradient(180deg, #eef2ff, #f7f9ff 300px);
   color: #222;
 }
 .container {
@@ -20,6 +20,21 @@ body {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
   margin-bottom: 18px;
 }
+.hero h1 {
+  margin-bottom: 8px;
+}
+.form-card h2 {
+  font-size: 1.05rem;
+  margin: 8px 0;
+}
+.field-block {
+  margin-bottom: 12px;
+}
+.help {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 0.9rem;
+}
 label {
   display: block;
   margin-bottom: 10px;
@@ -28,6 +43,9 @@ input[type="number"],
 input[type="file"] {
   width: 100%;
   margin-top: 4px;
+  border: 1px solid #ccd3e0;
+  border-radius: 8px;
+  padding: 8px;
 }
 .grid {
   display: grid;
@@ -40,7 +58,8 @@ input[type="file"] {
   gap: 8px;
 }
 button,
-.btn-secondary {
+.btn-secondary,
+.preset-btn {
   background: #3559e0;
   color: white;
   border: 0;
@@ -52,18 +71,42 @@ button,
   margin-bottom: 8px;
   display: inline-block;
 }
+.preset-btn {
+  background: #0c3f95;
+}
 .btn-secondary {
   background: #1f8f51;
+}
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+}
+.actions {
+  margin-top: 8px;
+}
+.summary-box {
+  background: #f4f7ff;
+  border: 1px solid #d9e1ff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 6px;
 }
 .results {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
-.results img {
+.results img,
+.source-preview img {
   width: 100%;
   border-radius: 8px;
   border: 1px solid #ddd;
+}
+.source-preview {
+  margin-bottom: 14px;
+}
+.hidden {
+  display: none;
 }
 .error {
   color: #b80000;
@@ -72,4 +115,9 @@ button,
 ol {
   max-height: 280px;
   overflow: auto;
+}
+@media (max-width: 880px) {
+  .results {
+    grid-template-columns: 1fr;
+  }
 }

@@ -8,36 +8,65 @@
 </head>
 <body>
   <main class="container">
-    <h1>Générateur String Art</h1>
-    <p class="subtitle">Upload une image, ajuste les paramètres, puis lance la génération directement depuis le site.</p>
+    <header class="hero card">
+      <h1>Générateur String Art</h1>
+      <p class="subtitle">Charge une image, choisis les paramètres avec des boutons, visualise le rendu puis exporte en PDF.</p>
+    </header>
 
-    <form method="post" action="/generate" enctype="multipart/form-data" class="card">
-      <label>Image source
-        <input type="file" name="image" accept="image/*" required>
-      </label>
-
-      <div class="grid">
-        <label>Nombre de clous
-          <input type="number" name="nails" min="40" max="320" value="{{ config.nails if config else 160 }}">
-        </label>
-        <label>Nombre de fils
-          <input type="number" name="lines" min="50" max="5000" value="{{ config.lines if config else 900 }}">
-        </label>
-        <label>Taille de rendu (px)
-          <input type="number" name="size" min="300" max="1000" value="{{ config.size if config else 700 }}">
-        </label>
+    <form method="post" action="/generate" enctype="multipart/form-data" class="card form-card">
+      <div class="field-block">
+        <label for="image-input">Image source</label>
+        <input id="image-input" type="file" name="image" accept="image/*" required>
+        <p class="help">Formats image standards acceptés (JPG/PNG/WebP).</p>
       </div>
 
+      <section class="source-preview hidden" id="source-preview-wrap">
+        <h2>Aperçu de l'image uploadée</h2>
+        <img id="source-preview" alt="Aperçu de l'image source">
+      </section>
+
+      <section class="field-block">
+        <h2>Préréglages rapides</h2>
+        <div class="preset-row">
+          <button class="preset-btn" type="button" data-preset="fast">Rapide</button>
+          <button class="preset-btn" type="button" data-preset="balanced">Équilibré</button>
+          <button class="preset-btn" type="button" data-preset="detailed">Détaillé</button>
+          <button class="preset-btn" type="button" data-preset="color">Couleur</button>
+        </div>
+      </section>
+
+      <section class="grid">
+        <label>Nombre de clous
+          <input id="nails" type="number" name="nails" min="40" max="320" value="{{ config.nails if config else 160 }}">
+        </label>
+        <label>Nombre de fils
+          <input id="lines" type="number" name="lines" min="50" max="5000" value="{{ config.lines if config else 900 }}">
+        </label>
+        <label>Taille de rendu (px)
+          <input id="size" type="number" name="size" min="300" max="1000" value="{{ config.size if config else 700 }}">
+        </label>
+        <label>Épaisseur des fils (impact visuel)
+          <input id="line_weight" type="number" name="line_weight" min="5" max="50" value="{{ config.line_weight if config else 18 }}">
+        </label>
+      </section>
+
       <label class="row">
-        <input type="checkbox" name="color_mode" {% if config and config.color_mode %}checked{% endif %}> Activer le string art couleur (rouge/vert/bleu)
+        <input id="color_mode" type="checkbox" name="color_mode" {% if config and config.color_mode %}checked{% endif %}> Activer le mode couleur (rouge/vert/bleu)
       </label>
 
-      <button type="submit">Créer le String Art</button>
-      {% if result_b64 %}
-      <a class="btn-secondary" href="/export-pdf">Exporter PDF</a>
-      <a class="btn-secondary" href="/download-image">Télécharger l'image</a>
-      <a class="btn-secondary" href="/download-instructions">Télécharger les instructions</a>
-      {% endif %}
+      <div class="summary-box" id="summary-box">
+        <strong>Résumé:</strong>
+        <span id="summary-text">{{ (config.nails if config else 160) }} clous · {{ (config.lines if config else 900) }} fils · {{ (config.size if config else 700) }} px · épaisseur {{ (config.line_weight if config else 18) }}</span>
+      </div>
+
+      <div class="actions">
+        <button type="submit">Générer le String Art</button>
+        {% if result_b64 %}
+        <a class="btn-secondary" href="/export-pdf">Exporter PDF</a>
+        <a class="btn-secondary" href="/download-image">Télécharger PNG</a>
+        <a class="btn-secondary" href="/download-instructions">Télécharger TXT</a>
+        {% endif %}
+      </div>
     </form>
 
     {% if error %}
@@ -69,5 +98,66 @@
     </section>
     {% endif %}
   </main>
+
+  <script>
+    const imageInput = document.getElementById('image-input');
+    const previewWrap = document.getElementById('source-preview-wrap');
+    const previewImg = document.getElementById('source-preview');
+    const summaryText = document.getElementById('summary-text');
+
+    const nailsInput = document.getElementById('nails');
+    const linesInput = document.getElementById('lines');
+    const sizeInput = document.getElementById('size');
+    const lineWeightInput = document.getElementById('line_weight');
+    const colorModeInput = document.getElementById('color_mode');
+
+    function refreshSummary() {
+      const colorText = colorModeInput.checked ? ' · mode couleur' : '';
+      summaryText.textContent = `${nailsInput.value} clous · ${linesInput.value} fils · ${sizeInput.value} px · épaisseur ${lineWeightInput.value}${colorText}`;
+    }
+
+    imageInput?.addEventListener('change', (event) => {
+      const [file] = event.target.files;
+      if (!file) {
+        previewWrap.classList.add('hidden');
+        previewImg.removeAttribute('src');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        previewImg.src = e.target.result;
+        previewWrap.classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    });
+
+    [nailsInput, linesInput, sizeInput, lineWeightInput, colorModeInput].forEach((input) => {
+      input?.addEventListener('input', refreshSummary);
+      input?.addEventListener('change', refreshSummary);
+    });
+
+    const presets = {
+      fast: { nails: 100, lines: 500, size: 500, line_weight: 20, color: false },
+      balanced: { nails: 160, lines: 900, size: 700, line_weight: 18, color: false },
+      detailed: { nails: 240, lines: 1800, size: 900, line_weight: 14, color: false },
+      color: { nails: 180, lines: 1200, size: 800, line_weight: 16, color: true },
+    };
+
+    document.querySelectorAll('.preset-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const preset = presets[btn.dataset.preset];
+        if (!preset) return;
+        nailsInput.value = preset.nails;
+        linesInput.value = preset.lines;
+        sizeInput.value = preset.size;
+        lineWeightInput.value = preset.line_weight;
+        colorModeInput.checked = preset.color;
+        refreshSummary();
+      });
+    });
+
+    refreshSummary();
+  </script>
 </body>
 </html>
