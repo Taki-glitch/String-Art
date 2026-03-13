@@ -1,48 +1,36 @@
-# String-Art Web App
+# String-Art Web App (100% navigateur)
 
-Application web Flask pour créer directement un string art depuis une image uploadée, avec une interface utilisateur complète (sans passer par des commandes).
+Application de string art utilisable directement depuis un site statique (GitHub Pages), sans backend Render.
 
-## Fonctionnalités
+## Ce que vous obtenez
 
-- Upload d'image depuis l'interface web
-- Aperçu instantané de l'image source avant génération
-- Paramètres configurables avec champs + préréglages rapides (Rapide / Équilibré / Détaillé / Couleur)
-- Réglage de l'épaisseur de fil en plus des clous/fils/taille
-- Génération directe du string art avec aperçu final
-- Schéma avec clous numérotés
-- Liste ordonnée des fils à tendre
-- Export PDF complet (schéma + aperçu + ordre des fils)
-- Téléchargement image PNG et instructions TXT
-- Mode couleur (fils rouge / vert / bleu)
+- Upload d'image
+- Réglages complets : clous, fils, taille, épaisseur, mode couleur
+- Préréglages rapides (Rapide / Équilibré / Détaillé / Couleur)
+- Génération dans le navigateur
+- Aperçu final + schéma clous
+- Liste des instructions
+- Exports : PNG / TXT / PDF
+- Bouton annuler pendant la génération
 
-## Important : lien GitHub vs lien du site
+## Utilisation simple (sans serveur)
 
-Si vous cliquez sur le lien du dépôt GitHub, vous verrez le README (c'est normal).
-L'application Flask a besoin d'un serveur Python pour fonctionner.
+1. Ouvrez `index.html` (ou activez GitHub Pages sur le repo).
+2. Chargez une image.
+3. Ajustez les paramètres.
+4. Cliquez sur **Générer**.
+5. Exportez le résultat.
 
-- Le fichier `index.html` à la racine sert de **page d'entrée GitHub Pages**.
-- Pour ouvrir la vraie app, il faut un déploiement backend (ex: Render), puis renseigner l'URL publique dans `index.html` (`DEPLOYED_APP_URL`).
+## Performance
 
-## Déployer en ligne (Render)
+La génération se fait entièrement dans le navigateur (CPU local).
+Si votre machine est lente, réduisez :
+- nombre de clous
+- nombre de fils
+- taille de rendu
 
-Le repo inclut déjà :
-- `Procfile`
-- `render.yaml`
+Préréglage recommandé pour commencer : **Équilibré**.
 
-Étapes rapides :
-1. Créez un compte Render.
-2. Importez ce repo GitHub comme nouveau service Web.
-3. Render détecte `render.yaml` et démarre avec `gunicorn app:app`.
-4. Copiez l'URL publique Render (ex: `https://string-art-web.onrender.com`).
-5. Mettez cette URL dans `index.html` (constante `DEPLOYED_APP_URL`) pour que le lien GitHub Pages ouvre directement le site.
+## Option Flask locale (facultative)
 
-## Lancer en local
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python app.py
-```
-
-Puis ouvrir http://localhost:5000
+Le backend Flask du repo existe encore pour un usage local, mais n'est plus nécessaire pour l'usage GitHub Pages.
