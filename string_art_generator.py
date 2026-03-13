@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 
 @dataclass
@@ -77,24 +77,41 @@ def _generate_single_channel(
     target_darkness = 255 - target_gray.astype(np.float32)
     rendered_darkness = np.zeros((size, size), dtype=np.float32)
     instructions: List[Tuple[int, int, str]] = []
+    current_nail = 0
+    nail_count = len(points)
 
     for _ in range(lines):
         need = np.clip(target_darkness - rendered_darkness, 0, 255)
 
-        best_score = 0.0
+        best_score = 1.0
         best_pair = None
-        for pair, (ys, xs) in line_cache.items():
+        min_distance = max(2, nail_count // 40)
+        for candidate in range(nail_count):
+            if candidate == current_nail:
+                continue
+            circular_distance = abs(candidate - current_nail)
+            circular_distance = min(circular_distance, nail_count - circular_distance)
+            if circular_distance <= min_distance:
+                continue
+
+            pair = (current_nail, candidate) if current_nail < candidate else (candidate, current_nail)
+            if pair not in line_cache:
+                continue
+
+            ys, xs = line_cache[pair]
             score = float(np.sum(need[ys, xs]))
+            score -= float(np.sum(rendered_darkness[ys, xs])) * 0.12
             if score > best_score:
                 best_score = score
                 best_pair = pair
 
-        if not best_pair or best_score < 1:
+        if not best_pair:
             break
 
         ys, xs = line_cache[best_pair]
         rendered_darkness[ys, xs] = np.minimum(255, rendered_darkness[ys, xs] + line_weight)
         instructions.append((best_pair[0], best_pair[1], color_name))
+        current_nail = best_pair[1] if best_pair[0] == current_nail else best_pair[0]
 
     canvas = np.clip(255 - rendered_darkness, 0, 255).astype(np.uint8)
     return canvas, instructions
@@ -120,7 +137,7 @@ def generate_string_art(image_bytes: bytes, config: GenerationConfig) -> Generat
             "noir",
             line_cache,
         )
-        result_img = Image.fromarray(canvas).convert("RGB")
+        result_img = render_realistic_string_art(points, steps, config.size)
         return GenerationResult(result_img, steps, points)
 
     split_lines = max(1, config.lines // 3)
@@ -140,9 +157,46 @@ def generate_string_art(image_bytes: bytes, config: GenerationConfig) -> Generat
         rendered_channels.append(channel_canvas)
         instructions.extend(steps)
 
-    composite = np.stack(rendered_channels, axis=2)
-    result_img = Image.fromarray(np.clip(composite, 0, 255).astype(np.uint8), mode="RGB")
+    result_img = render_realistic_string_art(points, instructions, config.size)
     return GenerationResult(result_img, instructions, points)
+
+
+def render_realistic_string_art(
+    nail_points: Sequence[Tuple[int, int]],
+    instructions: Sequence[Tuple[int, int, str]],
+    size: int,
+) -> Image.Image:
+    supersample = 2
+    large_size = size * supersample
+    scale_points = [(x * supersample, y * supersample) for x, y in nail_points]
+
+    base = Image.new("RGBA", (large_size, large_size), (244, 238, 225, 255))
+    thread_layer = Image.new("RGBA", (large_size, large_size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(thread_layer, "RGBA")
+    color_map = {
+        "noir": (20, 20, 20, 18),
+        "rouge": (190, 32, 46, 18),
+        "vert": (52, 128, 68, 18),
+        "bleu": (40, 90, 170, 18),
+    }
+
+    for start, end, color in instructions:
+        draw.line(
+            (scale_points[start], scale_points[end]),
+            fill=color_map.get(color, (20, 20, 20, 18)),
+            width=max(1, supersample),
+        )
+
+    softened = thread_layer.filter(ImageFilter.GaussianBlur(radius=0.8 * supersample))
+    combined = Image.alpha_composite(base, softened)
+    combined = Image.alpha_composite(combined, thread_layer)
+
+    pin_draw = ImageDraw.Draw(combined, "RGBA")
+    for x, y in scale_points:
+        pin_draw.ellipse((x - 4, y - 4, x + 4, y + 4), fill=(60, 60, 60, 255))
+        pin_draw.ellipse((x - 2, y - 2, x + 2, y + 2), fill=(220, 220, 220, 180))
+
+    return combined.resize((size, size), Image.Resampling.LANCZOS).convert("RGB")
 
 
 def render_schema_image(
