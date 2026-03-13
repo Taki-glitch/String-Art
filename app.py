@@ -81,6 +81,8 @@ def generate():
         schema_b64=schema_b64,
         instructions=result.instructions[:300],
         total_instructions=len(result.instructions),
+        all_instructions=result.instructions,
+        nail_points=result.nail_points,
         config=config,
     )
 

@@ -86,6 +86,22 @@
     </section>
 
     <section class="card">
+      <h2>Animation fil par fil</h2>
+      <canvas id="animation-canvas" width="{{ config.size }}" height="{{ config.size }}"></canvas>
+      <div class="grid" style="margin-top:10px;">
+        <label>Vitesse (fils/s)
+          <input id="speed-input" type="number" min="1" max="240" value="45">
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" id="play-btn">▶️ Lecture</button>
+        <button type="button" id="pause-btn" class="preset-btn">⏸️ Pause</button>
+        <button type="button" id="reset-btn" class="btn-secondary">↺ Réinitialiser</button>
+      </div>
+      <p id="animation-status">0 / {{ total_instructions }} fils tracés</p>
+    </section>
+
+    <section class="card">
       <h2>Ordre des fils ({{ total_instructions }} au total)</h2>
       <ol>
         {% for start, end, color in instructions %}
@@ -158,6 +174,107 @@
     });
 
     refreshSummary();
+
+    const canvas = document.getElementById('animation-canvas');
+    const statusEl = document.getElementById('animation-status');
+    const playBtn = document.getElementById('play-btn');
+    const pauseBtn = document.getElementById('pause-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const speedInput = document.getElementById('speed-input');
+
+    if (canvas && statusEl && playBtn && pauseBtn && resetBtn && speedInput) {
+      const ctx = canvas.getContext('2d');
+      const instructions = {{ (all_instructions or [])|tojson }};
+      const points = {{ (nail_points or [])|tojson }};
+      const colorMap = {
+        noir: 'rgba(20,20,20,0.13)',
+        rouge: 'rgba(190,32,46,0.13)',
+        vert: 'rgba(52,128,68,0.13)',
+        bleu: 'rgba(40,90,170,0.13)',
+      };
+
+      let index = 0;
+      let running = false;
+      let accumulator = 0;
+      let lastTs;
+
+      function drawNails() {
+        ctx.fillStyle = '#f4eee1';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        for (const [x, y] of points) {
+          ctx.beginPath();
+          ctx.fillStyle = '#555';
+          ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function drawStep(step) {
+        const [start, end, color] = step;
+        ctx.strokeStyle = colorMap[color] || colorMap.noir;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(points[start][0], points[start][1]);
+        ctx.lineTo(points[end][0], points[end][1]);
+        ctx.stroke();
+      }
+
+      function updateStatus() {
+        statusEl.textContent = `${index} / ${instructions.length} fils tracés`;
+      }
+
+      function resetAnimation() {
+        index = 0;
+        running = false;
+        accumulator = 0;
+        lastTs = undefined;
+        drawNails();
+        updateStatus();
+      }
+
+      function tick(ts) {
+        if (!running) return;
+        if (lastTs === undefined) lastTs = ts;
+        const delta = (ts - lastTs) / 1000;
+        lastTs = ts;
+        accumulator += delta;
+
+        const speed = Math.max(1, Number(speedInput.value) || 1);
+        const stepDuration = 1 / speed;
+
+        while (accumulator >= stepDuration && index < instructions.length) {
+          drawStep(instructions[index]);
+          index += 1;
+          accumulator -= stepDuration;
+        }
+
+        updateStatus();
+        if (index >= instructions.length) {
+          running = false;
+          return;
+        }
+
+        requestAnimationFrame(tick);
+      }
+
+      playBtn.addEventListener('click', () => {
+        if (index >= instructions.length) {
+          resetAnimation();
+        }
+        if (!running) {
+          running = true;
+          requestAnimationFrame(tick);
+        }
+      });
+
+      pauseBtn.addEventListener('click', () => {
+        running = false;
+      });
+
+      resetBtn.addEventListener('click', resetAnimation);
+
+      resetAnimation();
+    }
   </script>
 </body>
 </html>
