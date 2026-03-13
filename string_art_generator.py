@@ -67,6 +67,13 @@ def _precompute_line_pixels(points: Sequence[Tuple[int, int]], size: int) -> Lin
     return cache
 
 
+def _map_range(value: float, in_min: float, in_max: float, out_min: float, out_max: float) -> float:
+    if in_max == in_min:
+        return out_min
+    mapped = (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+    return max(min(mapped, max(out_min, out_max)), min(out_min, out_max))
+
+
 def _generate_single_channel(
     target_gray: np.ndarray,
     points: Sequence[Tuple[int, int]],
@@ -75,62 +82,71 @@ def _generate_single_channel(
     color_name: str,
     line_cache: LineCache,
 ) -> Tuple[np.ndarray, List[Tuple[int, int, str]]]:
-    size = target_gray.shape[0]
-    target_darkness = 255 - target_gray.astype(np.float32)
-    rendered_darkness = np.zeros((size, size), dtype=np.float32)
+    target = target_gray.astype(np.float32)
+    current_canvas = np.full_like(target, 255, dtype=np.float32)
     instructions: List[Tuple[int, int, str]] = []
     current_nail = 0
     nail_count = len(points)
     used_pairs: Dict[Tuple[int, int], int] = {}
     previous_nail = None
 
+    current_nail = 0
+    nail_count = len(points)
+    previous_nail = -1
+    previous_connections: Dict[int, set] = {}
+
+    fade = _map_range(line_weight, 5, 50, 0.03, 0.22)
+    min_jump = max(2, nail_count // 42)
+
     for _ in range(lines):
-        best_score = 0.0
-        best_pair = None
-        min_distance = max(2, nail_count // 42)
+        min_dist = float("inf")
+        best_candidate = -1
+        best_pixels = None
 
         for candidate in range(nail_count):
             if candidate == current_nail or candidate == previous_nail:
                 continue
 
-            circular_distance = abs(candidate - current_nail)
-            circular_distance = min(circular_distance, nail_count - circular_distance)
-            if circular_distance <= min_distance:
+            ring_dist = abs(candidate - current_nail)
+            ring_dist = min(ring_dist, nail_count - ring_dist)
+            if ring_dist <= min_jump:
                 continue
 
-            pair = (current_nail, candidate) if current_nail < candidate else (candidate, current_nail)
-            if pair not in line_cache:
+            key = (current_nail, candidate) if current_nail < candidate else (candidate, current_nail)
+            if key not in line_cache:
                 continue
 
-            ys, xs = line_cache[pair]
-            current_abs_error = np.abs(target_darkness[ys, xs] - rendered_darkness[ys, xs])
-            next_rendered = np.minimum(255, rendered_darkness[ys, xs] + line_weight)
-            next_abs_error = np.abs(target_darkness[ys, xs] - next_rendered)
-            improvement = float(np.sum(current_abs_error - next_abs_error))
-
-            if improvement <= 0:
+            if previous_connections.get(current_nail) and candidate in previous_connections[current_nail]:
                 continue
 
-            repetition_penalty = used_pairs.get(pair, 0) * 12.0
-            crossing_penalty = float(np.sum(np.maximum(0, rendered_darkness[ys, xs] - target_darkness[ys, xs]))) * 0.08
-            score = improvement - repetition_penalty - crossing_penalty
+            ys, xs = line_cache[key]
+            if len(xs) == 0:
+                continue
 
-            if score > best_score:
-                best_score = score
-                best_pair = pair
+            old_vals = current_canvas[ys, xs]
+            new_vals = old_vals * (1 - fade)
 
-        if not best_pair:
+            delta = np.abs(target[ys, xs] - new_vals) - np.abs(target[ys, xs] - old_vals)
+            score = float(np.sum(np.where(delta < 0, delta, delta / 5.0)))
+            score = (score / len(xs)) ** 3
+
+            if score < min_dist:
+                min_dist = score
+                best_candidate = candidate
+                best_pixels = (ys, xs)
+
+        if best_candidate < 0 or min_dist >= 0:
             break
 
-        ys, xs = line_cache[best_pair]
-        rendered_darkness[ys, xs] = np.minimum(255, rendered_darkness[ys, xs] + line_weight)
-        instructions.append((best_pair[0], best_pair[1], color_name))
-        used_pairs[best_pair] = used_pairs.get(best_pair, 0) + 1
-        previous_nail = current_nail
-        current_nail = best_pair[1] if best_pair[0] == current_nail else best_pair[0]
+        ys, xs = best_pixels
+        current_canvas[ys, xs] = current_canvas[ys, xs] * (1 - fade)
 
-    canvas = np.clip(255 - rendered_darkness, 0, 255).astype(np.uint8)
-    return canvas, instructions
+        previous_connections.setdefault(current_nail, set()).add(best_candidate)
+        instructions.append((current_nail, best_candidate, color_name))
+        previous_nail = current_nail
+        current_nail = best_candidate
+
+    return np.clip(current_canvas, 0, 255).astype(np.uint8), instructions
 
 
 def generate_string_art(image_bytes: bytes, config: GenerationConfig) -> GenerationResult:
