@@ -139,7 +139,16 @@ def _generate_single_channel(
 
     min_jump = max(2, nail_count // 42)
 
-    for _ in range(lines):
+    current_nail = 0
+    nail_count = len(points)
+    previous_nail = -1
+    previous_connections: Dict[int, set] = {}
+    edge_last_used: Dict[Tuple[int, int], int] = {}
+
+    min_jump = max(2, nail_count // 42)
+    edge_reuse_gap = max(12, nail_count // 3)
+
+    for step_idx in range(lines):
         max_gain = 0.0
         best_candidate = -1
         best_pixels = None
@@ -159,6 +168,10 @@ def _generate_single_channel(
                 continue
 
             if previous_connections.get(current_nail) and candidate in previous_connections[current_nail]:
+                continue
+
+            last_used = edge_last_used.get(key)
+            if last_used is not None and step_idx - last_used < edge_reuse_gap:
                 continue
 
             ys, xs = line_cache[key]
@@ -193,6 +206,10 @@ def _generate_single_channel(
         )
 
         previous_connections.setdefault(current_nail, set()).add(best_candidate)
+        previous_connections.setdefault(best_candidate, set()).add(current_nail)
+        edge_key = (current_nail, best_candidate) if current_nail < best_candidate else (best_candidate, current_nail)
+        edge_last_used[edge_key] = step_idx
+
         instructions.append((current_nail, best_candidate, color_name))
         previous_nail = current_nail
         current_nail = best_candidate
@@ -222,7 +239,7 @@ def generate_string_art(image_bytes: bytes, config: GenerationConfig) -> Generat
             "noir",
             line_cache,
         )
-        result_img = render_realistic_string_art(points, steps, config.size)
+        result_img = render_realistic_string_art(points, steps, config.size, config.line_weight)
         return GenerationResult(result_img, steps, points)
 
     split_lines = max(1, config.lines // 3)
@@ -248,7 +265,7 @@ def generate_string_art(image_bytes: bytes, config: GenerationConfig) -> Generat
             instructions.append(current_steps.pop(0))
         channel_index = (channel_index + 1) % len(channel_steps)
 
-    result_img = render_realistic_string_art(points, instructions, config.size)
+    result_img = render_realistic_string_art(points, instructions, config.size, config.line_weight)
     return GenerationResult(result_img, instructions, points)
 
 
@@ -256,6 +273,7 @@ def render_realistic_string_art(
     nail_points: Sequence[Tuple[int, int]],
     instructions: Sequence[Tuple[int, int, str]],
     size: int,
+    line_weight: int = 18,
 ) -> Image.Image:
     supersample = 3
     large_size = size * supersample
@@ -272,7 +290,9 @@ def render_realistic_string_art(
     }
 
     base_alpha = int(np.clip(_map_range(size, 300, 1400, 46, 24), 20, 52))
-    line_alpha = int(np.clip(base_alpha + _map_range(len(instructions), 100, 4000, -3, 8), 18, 64))
+    weight_alpha = _map_range(line_weight, 5, 50, -5, 8)
+    density_alpha = _map_range(len(instructions), 100, 4000, -3, 8)
+    line_alpha = int(np.clip(base_alpha + weight_alpha + density_alpha, 18, 72))
 
     for start, end, color in instructions:
         rgb = color_map.get(color, (20, 20, 20))
