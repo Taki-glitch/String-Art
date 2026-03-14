@@ -54,16 +54,50 @@ def create_circle_points(nails: int, size: int) -> List[Tuple[int, int]]:
     return points
 
 
-def _precompute_line_pixels(points: Sequence[Tuple[int, int]], size: int) -> LineCache:
+def _bresenham_pixels(start: Tuple[int, int], end: Tuple[int, int]) -> Tuple[np.ndarray, np.ndarray]:
+    x0, y0 = start
+    x1, y1 = end
+
+    dx = abs(x1 - x0)
+    dy = abs(y1 - y0)
+    sx = 1 if x0 < x1 else -1
+    sy = 1 if y0 < y1 else -1
+    err = dx - dy
+
+    xs: List[int] = []
+    ys: List[int] = []
+
+    while True:
+        xs.append(x0)
+        ys.append(y0)
+        if x0 == x1 and y0 == y1:
+            break
+        e2 = 2 * err
+        if e2 > -dy:
+            err -= dy
+            x0 += sx
+        if e2 < dx:
+            err += dx
+            y0 += sy
+
+    return np.array(ys, dtype=np.int32), np.array(xs, dtype=np.int32)
+
+
+def _precompute_line_pixels(points: Sequence[Tuple[int, int]], size: int, min_jump: int) -> LineCache:
     cache: LineCache = {}
-    for i in range(len(points)):
-        for j in range(i + 1, len(points)):
-            mask_img = Image.new("L", (size, size), 0)
-            ImageDraw.Draw(mask_img).line((points[i], points[j]), fill=1, width=1)
-            mask = np.array(mask_img, dtype=np.uint8)
-            ys, xs = np.where(mask == 1)
-            if len(xs) > 0:
+    nail_count = len(points)
+
+    for i in range(nail_count):
+        for j in range(i + 1, nail_count):
+            ring_dist = abs(j - i)
+            ring_dist = min(ring_dist, nail_count - ring_dist)
+            if ring_dist <= min_jump:
+                continue
+
+            ys, xs = _bresenham_pixels(points[i], points[j])
+            if xs.size > 0:
                 cache[(i, j)] = (ys, xs)
+
     return cache
 
 
@@ -82,7 +116,7 @@ def _generate_single_channel(
     color_name: str,
     line_cache: LineCache,
 ) -> Tuple[np.ndarray, List[Tuple[int, int, str]]]:
-    target = target_gray.astype(np.float32)
+    target = np.clip(target_gray, 0, 255).astype(np.float32)
     current_canvas = np.full_like(target, 255, dtype=np.float32)
     instructions: List[Tuple[int, int, str]] = []
     current_nail = 0
@@ -98,10 +132,18 @@ def _generate_single_channel(
     fade = _map_range(line_weight, 5, 50, 0.03, 0.22)
     min_jump = max(2, nail_count // 42)
 
+    current_nail = 0
+    nail_count = len(points)
+    previous_nail = -1
+    previous_connections: Dict[int, set] = {}
+
+    min_jump = max(2, nail_count // 42)
+
     for _ in range(lines):
-        min_dist = float("inf")
+        max_gain = 0.0
         best_candidate = -1
         best_pixels = None
+        best_line_fade = None
 
         for candidate in range(nail_count):
             if candidate == current_nail or candidate == previous_nail:
@@ -124,22 +166,31 @@ def _generate_single_channel(
                 continue
 
             old_vals = current_canvas[ys, xs]
-            new_vals = old_vals * (1 - fade)
 
-            delta = np.abs(target[ys, xs] - new_vals) - np.abs(target[ys, xs] - old_vals)
-            score = float(np.sum(np.where(delta < 0, delta, delta / 5.0)))
-            score = (score / len(xs)) ** 3
+            contrast = float(np.mean((255.0 - target[ys, xs]) / 255.0))
+            base_fade = _map_range(line_weight, 5, 50, 0.05, 0.20)
+            fade = float(np.clip(base_fade * (0.75 + contrast * 0.7), 0.04, 0.28))
 
-            if score < min_dist:
-                min_dist = score
+            new_vals = np.clip(old_vals - (fade * (255.0 - target[ys, xs])), 0.0, 255.0)
+            delta = old_vals - target[ys, xs]
+            new_delta = new_vals - target[ys, xs]
+            gain = float(np.sum(delta * delta - new_delta * new_delta))
+
+            if gain > max_gain:
+                max_gain = gain
                 best_candidate = candidate
                 best_pixels = (ys, xs)
+                best_line_fade = fade
 
-        if best_candidate < 0 or min_dist >= 0:
+        if best_candidate < 0 or best_pixels is None or best_line_fade is None or max_gain <= 0:
             break
 
         ys, xs = best_pixels
-        current_canvas[ys, xs] = current_canvas[ys, xs] * (1 - fade)
+        current_canvas[ys, xs] = np.clip(
+            current_canvas[ys, xs] - (best_line_fade * (255.0 - target[ys, xs])),
+            0.0,
+            255.0,
+        )
 
         previous_connections.setdefault(current_nail, set()).add(best_candidate)
         instructions.append((current_nail, best_candidate, color_name))
@@ -157,10 +208,12 @@ def generate_string_art(image_bytes: bytes, config: GenerationConfig) -> Generat
 
     source = decode_image(image_bytes, config.size)
     points = create_circle_points(config.nails, config.size)
-    line_cache = _precompute_line_pixels(points, config.size)
+    min_jump = max(2, config.nails // 42)
+    line_cache = _precompute_line_pixels(points, config.size, min_jump)
 
     if not config.color_mode:
-        gray = np.dot(source[..., :3], [0.299, 0.587, 0.114]).astype(np.uint8)
+        gray = np.dot(source[..., :3], [0.299, 0.587, 0.114]).astype(np.float32)
+        gray = np.clip(gray, 0, 255).astype(np.uint8)
         _, steps = _generate_single_channel(
             gray,
             points,
@@ -204,7 +257,7 @@ def render_realistic_string_art(
     instructions: Sequence[Tuple[int, int, str]],
     size: int,
 ) -> Image.Image:
-    supersample = 2
+    supersample = 3
     large_size = size * supersample
     scale_points = [(x * supersample, y * supersample) for x, y in nail_points]
 
@@ -212,16 +265,20 @@ def render_realistic_string_art(
     thread_layer = Image.new("RGBA", (large_size, large_size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(thread_layer, "RGBA")
     color_map = {
-        "noir": (20, 20, 20, 17),
-        "rouge": (190, 32, 46, 17),
-        "vert": (52, 128, 68, 17),
-        "bleu": (40, 90, 170, 17),
+        "noir": (20, 20, 20),
+        "rouge": (190, 32, 46),
+        "vert": (52, 128, 68),
+        "bleu": (40, 90, 170),
     }
 
+    base_alpha = int(np.clip(_map_range(size, 300, 1400, 46, 24), 20, 52))
+    line_alpha = int(np.clip(base_alpha + _map_range(len(instructions), 100, 4000, -3, 8), 18, 64))
+
     for start, end, color in instructions:
+        rgb = color_map.get(color, (20, 20, 20))
         draw.line(
             (scale_points[start], scale_points[end]),
-            fill=color_map.get(color, (20, 20, 20, 17)),
+            fill=(*rgb, line_alpha),
             width=max(1, supersample),
         )
 
