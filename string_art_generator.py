@@ -119,6 +119,18 @@ def _generate_single_channel(
     target = np.clip(target_gray, 0, 255).astype(np.float32)
     current_canvas = np.full_like(target, 255, dtype=np.float32)
     instructions: List[Tuple[int, int, str]] = []
+    current_nail = 0
+    nail_count = len(points)
+    used_pairs: Dict[Tuple[int, int], int] = {}
+    previous_nail = None
+
+    current_nail = 0
+    nail_count = len(points)
+    previous_nail = -1
+    previous_connections: Dict[int, set] = {}
+
+    fade = _map_range(line_weight, 5, 50, 0.03, 0.22)
+    min_jump = max(2, nail_count // 42)
 
     current_nail = 0
     nail_count = len(points)
