@@ -11,14 +11,14 @@
   <main class="container">
     <header class="hero card">
       <h1>String Art Studio</h1>
-      <p class="subtitle">Version 100% navigateur : aucun serveur requis. Upload, paramètres, aperçu, export PNG/TXT/PDF.</p>
+      <p class="subtitle">Nouvelle version 100% navigateur : rendu réaliste + animation fil par fil + exports pour reproduire facilement en vrai.</p>
     </header>
 
     <section class="card form-card">
       <div class="field-block">
         <label for="image-input">Image source</label>
         <input id="image-input" type="file" accept="image/*">
-        <p class="help">Conseil perf: commence avec 120-180 clous et 600-1200 fils.</p>
+        <p class="help">Conseil qualité: commence avec 160-240 clous et 900-1800 fils.</p>
       </div>
 
       <section class="source-preview hidden" id="source-preview-wrap">
@@ -38,13 +38,13 @@
 
       <section class="grid">
         <label>Nombre de clous
-          <input id="nails" type="number" min="40" max="280" value="160">
+          <input id="nails" type="number" min="40" max="320" value="180">
         </label>
         <label>Nombre de fils
-          <input id="lines" type="number" min="50" max="4000" value="900">
+          <input id="lines" type="number" min="50" max="5000" value="1200">
         </label>
         <label>Taille de rendu (px)
-          <input id="size" type="number" min="300" max="1000" value="700">
+          <input id="size" type="number" min="300" max="1000" value="760">
         </label>
         <label>Épaisseur visuelle
           <input id="line-weight" type="number" min="4" max="40" value="16">
@@ -56,7 +56,7 @@
       </label>
 
       <div class="summary-box">
-        <strong>Résumé:</strong> <span id="summary-text">160 clous · 900 fils · 700px · épaisseur 16</span>
+        <strong>Résumé:</strong> <span id="summary-text">180 clous · 1200 fils · 760px · épaisseur 16</span>
       </div>
 
       <div class="actions">
@@ -75,13 +75,32 @@
 
     <section class="results">
       <article class="card">
-        <h2>Aperçu final</h2>
-        <canvas id="result-canvas" width="700" height="700"></canvas>
+        <h2>Aperçu final réaliste</h2>
+        <canvas id="result-canvas" width="760" height="760"></canvas>
       </article>
       <article class="card">
         <h2>Schéma clous</h2>
-        <canvas id="schema-canvas" width="700" height="700"></canvas>
+        <canvas id="schema-canvas" width="760" height="760"></canvas>
       </article>
+    </section>
+
+    <section class="card">
+      <h2>Animation fil par fil</h2>
+      <canvas id="animation-canvas" width="760" height="760"></canvas>
+      <div class="grid" style="margin-top:10px;">
+        <label>Vitesse (fils/s)
+          <input id="speed-input" type="number" min="1" max="240" value="50">
+        </label>
+        <label>Position animation
+          <input id="progress-input" type="range" min="0" max="0" value="0">
+        </label>
+      </div>
+      <div class="actions">
+        <button id="play-btn" type="button">▶️ Lecture</button>
+        <button id="pause-btn" type="button" class="preset-btn">⏸️ Pause</button>
+        <button id="reset-btn" type="button" class="btn-secondary">↺ Réinitialiser</button>
+      </div>
+      <p id="animation-status">0 / 0 fils tracés</p>
     </section>
 
     <section class="card">

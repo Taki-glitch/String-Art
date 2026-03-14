@@ -1,11 +1,185 @@
+const constrain = (val, min, max) => (val < min ? min : (val > max ? max : val));
+const map = (value, x1, y1, x2, y2) => (value - x1) * (y2 - x2) / (y1 - x1) + x2;
+
+class Color {
+  constructor(r, g, b, a = 255) {
+    this.r = r;
+    this.g = g;
+    this.b = b;
+    this.a = a;
+  }
+}
+
+class Point {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+  }
+}
+
+class ImageBuffer {
+  constructor(data, width, height) {
+    this.data = data;
+    this.width = width;
+    this.height = height;
+  }
+
+  get_image_point(svgPoint, bbox) {
+    const x = Math.floor(map(svgPoint.x, bbox.x, bbox.x + bbox.width, 0, this.width - 1));
+    const y = Math.floor(map(svgPoint.y, bbox.y, bbox.y + bbox.height, 0, this.height - 1));
+    return new Point(constrain(x, 0, this.width - 1), constrain(y, 0, this.height - 1));
+  }
+}
+
+class Line {
+  constructor(startIndex, endIndex, graph) {
+    this.startIndex = startIndex;
+    this.endIndex = endIndex;
+    this.graph = graph;
+    this.pixels = [];
+    this.fade = 1 / (graph.downscaleFactor * 1.8);
+    this.computePixelOverlap();
+  }
+
+  computePixelOverlap() {
+    this.pixels = [];
+    const start = this.graph.nailsPos[this.startIndex];
+    const end = this.graph.nailsPos[this.endIndex];
+
+    let x0 = start.x;
+    let x1 = end.x;
+    let y0 = start.y;
+    let y1 = end.y;
+    let dx = Math.abs(x1 - x0);
+    let dy = Math.abs(y1 - y0);
+    let sx = x0 < x1 ? 1 : -1;
+    let sy = y0 < y1 ? 1 : -1;
+    let err = dx - dy;
+
+    while (true) {
+      this.pixels.push(new Point(x0, y0));
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 > -dy) {
+        err -= dy;
+        x0 += sx;
+      }
+      if (e2 < dx) {
+        err += dx;
+        y0 += sy;
+      }
+    }
+  }
+
+  getLineDiff(color) {
+    const colorArr = [color.r, color.g, color.b, color.a];
+    let totalDiff = 0;
+
+    for (let i = 0; i < this.pixels.length; i += 1) {
+      const p = this.pixels[i];
+      const ind = (p.x + p.y * this.graph.img.width) * 4;
+      let pixelDiff = 0;
+
+      for (let j = 0; j < 4; j += 1) {
+        const newC = colorArr[j] * this.fade + this.graph.currentData[ind + j] * (1 - this.fade);
+        const diff = Math.abs(this.graph.origData[ind + j] - newC)
+          - Math.abs(this.graph.currentData[ind + j] - this.graph.origData[ind + j]);
+        pixelDiff += diff;
+      }
+
+      if (pixelDiff < 0) totalDiff += pixelDiff;
+      if (pixelDiff > 0) totalDiff += pixelDiff / 5;
+    }
+
+    return Math.pow(totalDiff / Math.max(1, this.pixels.length), 3);
+  }
+
+  addToBuffer(color) {
+    const colorArr = [color.r, color.g, color.b, color.a];
+    for (let i = 0; i < this.pixels.length; i += 1) {
+      const p = this.pixels[i];
+      const ind = (p.x + p.y * this.graph.img.width) * 4;
+      for (let c = 0; c < 4; c += 1) {
+        const value = colorArr[c] * this.fade + this.graph.currentData[ind + c] * (1 - this.fade);
+        this.graph.currentData[ind + c] = constrain(Math.round(value), 0, 255);
+      }
+    }
+  }
+}
+
+class Thread {
+  constructor(startNail, color, graph, colorName) {
+    this.currentNail = startNail;
+    this.color = color;
+    this.colorName = colorName;
+    this.graph = graph;
+    this.nailOrder = [startNail];
+    this.nextDist = Infinity;
+    this.nextNail = startNail;
+    this.nextLine = null;
+    this.nextValid = false;
+    this.prevConnections = [];
+  }
+
+  getNextNailWeight() {
+    if (this.nextValid) return this.nextDist;
+
+    const chords = this.graph.getConnections(this.currentNail);
+    let minDist = Infinity;
+    let minDistIndex = -1;
+
+    chords.forEach((line, i) => {
+      if (!line || i === this.currentNail) return;
+      const ringDist = Math.abs(i - this.currentNail);
+      const wrapped = Math.min(ringDist, this.graph.numNails - ringDist);
+      if (wrapped <= this.graph.minJump) return;
+
+      let dist = line.getLineDiff(this.color);
+      if (this.prevConnections[this.currentNail] && this.prevConnections[this.currentNail][i] === true) {
+        dist = 0;
+      }
+      if (dist < minDist) {
+        minDist = dist;
+        minDistIndex = i;
+      }
+    });
+
+    if (minDist >= 0 || minDistIndex < 0) {
+      minDist = Infinity;
+      minDistIndex = -1;
+    }
+
+    this.nextDist = minDist;
+    this.nextNail = minDistIndex;
+    this.nextLine = minDistIndex >= 0 ? chords[minDistIndex] : null;
+    this.nextValid = true;
+    return minDist;
+  }
+
+  moveToNextNail() {
+    if (!this.nextValid) this.getNextNailWeight();
+    if (!this.nextLine || this.nextNail < 0) return false;
+
+    if (!this.prevConnections[this.currentNail]) this.prevConnections[this.currentNail] = [];
+    this.prevConnections[this.currentNail][this.nextNail] = true;
+
+    this.nextLine.addToBuffer(this.color);
+    const start = this.currentNail;
+    this.currentNail = this.nextNail;
+    this.nailOrder.push(this.currentNail);
+    this.nextValid = false;
+
+    this.graph.instructions.push({ start, end: this.currentNail, color: this.colorName });
+    return true;
+  }
+}
+
 const state = {
   sourceImage: null,
-  sourceData: null,
-  resultCanvas: document.getElementById('result-canvas'),
-  schemaCanvas: document.getElementById('schema-canvas'),
   instructions: [],
   nailPoints: [],
   cancel: false,
+  anim: { running: false, index: 0, accumulator: 0, lastTs: undefined },
 };
 
 const ui = {
@@ -27,6 +201,94 @@ const ui = {
   status: document.getElementById('status'),
   instructionsList: document.getElementById('instructions-list'),
   stepsCount: document.getElementById('steps-count'),
+  resultCanvas: document.getElementById('result-canvas'),
+  schemaCanvas: document.getElementById('schema-canvas'),
+  animationCanvas: document.getElementById('animation-canvas'),
+  speedInput: document.getElementById('speed-input'),
+  progressInput: document.getElementById('progress-input'),
+  playBtn: document.getElementById('play-btn'),
+  pauseBtn: document.getElementById('pause-btn'),
+  resetBtn: document.getElementById('reset-btn'),
+  animationStatus: document.getElementById('animation-status'),
+};
+
+const graph = {
+  downscaleFactor: 4,
+  lineCache: new Map(),
+  threads: [],
+  instructions: [],
+  init(size, numNails) {
+    this.size = size;
+    this.numNails = numNails;
+    this.minJump = Math.max(2, Math.floor(numNails * 0.03));
+    this.lineCache.clear();
+    this.instructions = [];
+    this.nailsPos = [];
+
+    const center = size / 2;
+    const radius = size / 2 - 12;
+    for (let i = 0; i < numNails; i += 1) {
+      const angle = (2 * Math.PI * i) / numNails;
+      this.nailsPos.push(new Point(Math.round(center + radius * Math.cos(angle)), Math.round(center + radius * Math.sin(angle))));
+    }
+  },
+
+  setupImageData(sourceData, colorMode) {
+    const image = new ImageBuffer(sourceData, this.size, this.size);
+    this.img = image;
+    this.origData = new Uint8ClampedArray(sourceData);
+    this.currentData = new Float32Array(sourceData.length);
+    for (let i = 0; i < this.currentData.length; i += 4) {
+      this.currentData[i] = 255;
+      this.currentData[i + 1] = 255;
+      this.currentData[i + 2] = 255;
+      this.currentData[i + 3] = 255;
+    }
+
+    this.threads = [];
+    if (!colorMode) {
+      this.threads.push(new Thread(0, new Color(0, 0, 0, 255), this, 'noir'));
+    } else {
+      this.threads.push(new Thread(0, new Color(255, 0, 0, 255), this, 'rouge'));
+      this.threads.push(new Thread(0, new Color(0, 255, 0, 255), this, 'vert'));
+      this.threads.push(new Thread(0, new Color(0, 0, 255, 255), this, 'bleu'));
+    }
+  },
+
+  getConnections(nailNum) {
+    const ret = [];
+    for (let i = 0; i < this.numNails; i += 1) {
+      if (i === nailNum) {
+        ret[i] = null;
+        continue;
+      }
+      const key = `${Math.min(i, nailNum)}|${Math.max(i, nailNum)}`;
+      if (this.lineCache.has(key)) {
+        ret[i] = this.lineCache.get(key);
+      } else {
+        const line = new Line(nailNum, i, this);
+        this.lineCache.set(key, line);
+        ret[i] = line;
+      }
+    }
+    return ret;
+  },
+
+  step() {
+    let minThread = null;
+    let minWeight = Infinity;
+
+    for (let i = 0; i < this.threads.length; i += 1) {
+      const weight = this.threads[i].getNextNailWeight();
+      if (weight <= minWeight) {
+        minWeight = weight;
+        minThread = this.threads[i];
+      }
+    }
+
+    if (!minThread || minWeight === Infinity) return false;
+    return minThread.moveToNextNail();
+  },
 };
 
 function refreshSummary() {
@@ -34,41 +296,16 @@ function refreshSummary() {
   ui.summaryText.textContent = `${ui.nails.value} clous · ${ui.lines.value} fils · ${ui.size.value}px · épaisseur ${ui.lineWeight.value}${c}`;
 }
 
-function createCirclePoints(nails, size) {
-  const center = Math.floor(size / 2);
-  const radius = Math.floor(size / 2) - 12;
-  const points = [];
-  for (let i = 0; i < nails; i += 1) {
-    const angle = (2 * Math.PI * i) / nails;
-    points.push([
-      Math.round(center + radius * Math.cos(angle)),
-      Math.round(center + radius * Math.sin(angle)),
-    ]);
+function toGray(data) {
+  const out = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < data.length; i += 4) {
+    const g = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+    out[i] = g;
+    out[i + 1] = g;
+    out[i + 2] = g;
+    out[i + 3] = 255;
   }
-  return points;
-}
-
-function bresenham(x0, y0, x1, y1) {
-  const pts = [];
-  let dx = Math.abs(x1 - x0);
-  let sx = x0 < x1 ? 1 : -1;
-  let dy = -Math.abs(y1 - y0);
-  let sy = y0 < y1 ? 1 : -1;
-  let err = dx + dy;
-  while (true) {
-    pts.push([x0, y0]);
-    if (x0 === x1 && y0 === y1) break;
-    const e2 = 2 * err;
-    if (e2 >= dy) {
-      err += dy;
-      x0 += sx;
-    }
-    if (e2 <= dx) {
-      err += dx;
-      y0 += sy;
-    }
-  }
-  return pts;
+  return out;
 }
 
 function drawSourceToData(size) {
@@ -76,32 +313,24 @@ function drawSourceToData(size) {
   c.width = size;
   c.height = size;
   const ctx = c.getContext('2d');
-  ctx.drawImage(state.sourceImage, 0, 0, size, size);
-  return ctx.getImageData(0, 0, size, size).data;
-}
 
-function toGray(data) {
-  const out = new Float32Array(data.length / 4);
-  for (let i = 0, j = 0; i < data.length; i += 4, j += 1) {
-    out[j] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+  const sourceRatio = state.sourceImage.width / state.sourceImage.height;
+  let sx = 0; let sy = 0; let sw = state.sourceImage.width; let sh = state.sourceImage.height;
+  if (sourceRatio > 1) {
+    sw = state.sourceImage.height;
+    sx = Math.floor((state.sourceImage.width - sw) / 2);
+  } else {
+    sh = state.sourceImage.width;
+    sy = Math.floor((state.sourceImage.height - sh) / 2);
   }
-  return out;
-}
 
-function channelData(data, ch) {
-  const out = new Float32Array(data.length / 4);
-  for (let i = 0, j = 0; i < data.length; i += 4, j += 1) out[j] = data[i + ch];
-  return out;
-}
-
-function idx(x, y, size) {
-  return y * size + x;
+  ctx.drawImage(state.sourceImage, sx, sy, sw, sh, 0, 0, size, size);
+  return ctx.getImageData(0, 0, size, size).data;
 }
 
 function renderInstructionsList(max = 300) {
   ui.instructionsList.innerHTML = '';
-  const shown = state.instructions.slice(0, max);
-  shown.forEach((s) => {
+  state.instructions.slice(0, max).forEach((s) => {
     const li = document.createElement('li');
     li.textContent = `Clou ${s.start} → Clou ${s.end} (${s.color})`;
     ui.instructionsList.appendChild(li);
@@ -110,21 +339,21 @@ function renderInstructionsList(max = 300) {
 }
 
 function drawSchema(size) {
-  const ctx = state.schemaCanvas.getContext('2d');
-  state.schemaCanvas.width = size;
-  state.schemaCanvas.height = size;
+  const ctx = ui.schemaCanvas.getContext('2d');
+  ui.schemaCanvas.width = size;
+  ui.schemaCanvas.height = size;
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, size, size);
 
-  const colorMap = { noir: '#111', rouge: '#d11', vert: '#1a8a1a', bleu: '#1456e0' };
-  ctx.lineWidth = 1;
+  const colors = { noir: '#111', rouge: '#d11', vert: '#198b19', bleu: '#1759e5' };
   state.instructions.forEach((s) => {
     const p1 = state.nailPoints[s.start];
     const p2 = state.nailPoints[s.end];
-    ctx.strokeStyle = colorMap[s.color] || '#111';
+    ctx.strokeStyle = colors[s.color] || '#111';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(p1[0], p1[1]);
-    ctx.lineTo(p2[0], p2[1]);
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
     ctx.stroke();
   });
 
@@ -132,62 +361,111 @@ function drawSchema(size) {
   ctx.font = '10px Arial';
   state.nailPoints.forEach((p, i) => {
     ctx.beginPath();
-    ctx.arc(p[0], p[1], 3, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillText(String(i), p[0] + 6, p[1] + 6);
+    ctx.fillText(String(i), p.x + 6, p.y + 6);
   });
 }
 
-async function generateChannel(targetChannel, size, points, totalLines, lineWeight, colorName, renderedRgb, colorIndex) {
-  const darknessTarget = new Float32Array(targetChannel.length);
-  const darknessRendered = new Float32Array(targetChannel.length);
-  for (let i = 0; i < targetChannel.length; i += 1) darknessTarget[i] = 255 - targetChannel[i];
+function drawResult(size) {
+  const ctx = ui.resultCanvas.getContext('2d');
+  ui.resultCanvas.width = size;
+  ui.resultCanvas.height = size;
+  ctx.fillStyle = '#f4eee1';
+  ctx.fillRect(0, 0, size, size);
 
-  let current = 0;
-  const minJump = Math.max(4, Math.floor(points.length * 0.03));
-  const out = [];
+  const colors = {
+    noir: 'rgba(20,20,20,0.15)',
+    rouge: 'rgba(190,32,46,0.15)',
+    vert: 'rgba(52,128,68,0.15)',
+    bleu: 'rgba(40,90,170,0.15)',
+  };
 
-  for (let step = 0; step < totalLines; step += 1) {
-    if (state.cancel) return out;
+  state.instructions.forEach((step) => {
+    const p1 = state.nailPoints[step.start];
+    const p2 = state.nailPoints[step.end];
+    ctx.strokeStyle = colors[step.color] || colors.noir;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+  });
 
-    let best = null;
-    let bestScore = -1;
-    for (let candidate = 0; candidate < points.length; candidate += 1) {
-      if (candidate === current) continue;
-      const dist = Math.abs(candidate - current);
-      const ringDist = Math.min(dist, points.length - dist);
-      if (ringDist < minJump) continue;
+  const r = constrain(map(state.nailPoints.length, 40, 320, 2.8, 1.8), 1.8, 2.8);
+  state.nailPoints.forEach((p) => {
+    ctx.beginPath();
+    ctx.fillStyle = '#555';
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
 
-      const linePts = bresenham(points[current][0], points[current][1], points[candidate][0], points[candidate][1]);
-      let score = 0;
-      for (let i = 0; i < linePts.length; i += 2) {
-        const [x, y] = linePts[i];
-        const k = idx(x, y, size);
-        score += Math.max(0, darknessTarget[k] - darknessRendered[k]);
-      }
-      if (score > bestScore) {
-        bestScore = score;
-        best = { candidate, linePts };
-      }
-    }
+function drawAnimationFrame(targetIndex) {
+  const ctx = ui.animationCanvas.getContext('2d');
+  const size = ui.animationCanvas.width;
+  ctx.fillStyle = '#f4eee1';
+  ctx.fillRect(0, 0, size, size);
 
-    if (!best || bestScore < 1) break;
+  const colors = {
+    noir: 'rgba(20,20,20,0.16)',
+    rouge: 'rgba(190,32,46,0.16)',
+    vert: 'rgba(52,128,68,0.16)',
+    bleu: 'rgba(40,90,170,0.16)',
+  };
 
-    best.linePts.forEach(([x, y]) => {
-      const k = idx(x, y, size);
-      darknessRendered[k] = Math.min(255, darknessRendered[k] + lineWeight);
-      const val = Math.max(0, 255 - darknessRendered[k]);
-      renderedRgb[(k * 4) + colorIndex] = Math.round(val);
-      renderedRgb[(k * 4) + 3] = 255;
-    });
-
-    out.push({ start: current, end: best.candidate, color: colorName });
-    current = best.candidate;
-
-    if (step % 8 === 0) await new Promise((r) => setTimeout(r, 0));
+  for (let i = 0; i < targetIndex; i += 1) {
+    const step = state.instructions[i];
+    const p1 = state.nailPoints[step.start];
+    const p2 = state.nailPoints[step.end];
+    ctx.strokeStyle = colors[step.color] || colors.noir;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
   }
 
-  return out;
+  const r = constrain(map(state.nailPoints.length, 40, 320, 2.8, 1.8), 1.8, 2.8);
+  state.nailPoints.forEach((p) => {
+    ctx.beginPath();
+    ctx.fillStyle = '#555';
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ui.animationStatus.textContent = `${targetIndex} / ${state.instructions.length} fils tracés`;
+  ui.progressInput.value = String(targetIndex);
+}
+
+function resetAnimation() {
+  state.anim.running = false;
+  state.anim.index = 0;
+  state.anim.accumulator = 0;
+  state.anim.lastTs = undefined;
+  drawAnimationFrame(0);
+}
+
+function tickAnimation(ts) {
+  if (!state.anim.running) return;
+  if (state.anim.lastTs === undefined) state.anim.lastTs = ts;
+  const delta = (ts - state.anim.lastTs) / 1000;
+  state.anim.lastTs = ts;
+  state.anim.accumulator += delta;
+
+  const speed = constrain(Number(ui.speedInput.value) || 1, 1, 240);
+  const stepDuration = 1 / speed;
+  while (state.anim.accumulator >= stepDuration && state.anim.index < state.instructions.length) {
+    state.anim.index += 1;
+    state.anim.accumulator -= stepDuration;
+  }
+
+  drawAnimationFrame(state.anim.index);
+  if (state.anim.index >= state.instructions.length) {
+    state.anim.running = false;
+    return;
+  }
+  requestAnimationFrame(tickAnimation);
 }
 
 async function generate() {
@@ -197,66 +475,51 @@ async function generate() {
   }
 
   state.cancel = false;
+  state.anim.running = false;
   ui.generateBtn.disabled = true;
 
-  const nails = Math.max(40, Math.min(280, Number(ui.nails.value) || 160));
-  const lines = Math.max(50, Math.min(4000, Number(ui.lines.value) || 900));
-  const size = Math.max(300, Math.min(1000, Number(ui.size.value) || 700));
-  const lineWeight = Math.max(4, Math.min(40, Number(ui.lineWeight.value) || 16));
+  const nails = Math.max(40, Math.min(320, Number(ui.nails.value) || 180));
+  const lines = Math.max(50, Math.min(5000, Number(ui.lines.value) || 1200));
+  const size = Math.max(300, Math.min(1000, Number(ui.size.value) || 760));
   const colorMode = ui.colorMode.checked;
 
-  ui.progress.value = 2;
+  ui.progress.value = 5;
   ui.status.textContent = 'Préparation...';
 
-  const source = drawSourceToData(size);
-  state.sourceData = source;
-  state.nailPoints = createCirclePoints(nails, size);
-  state.instructions = [];
+  let source = drawSourceToData(size);
+  if (!colorMode) source = toGray(source);
 
-  const resultCtx = state.resultCanvas.getContext('2d');
-  state.resultCanvas.width = size;
-  state.resultCanvas.height = size;
-  const resultImage = resultCtx.createImageData(size, size);
-  for (let i = 0; i < resultImage.data.length; i += 4) {
-    resultImage.data[i] = 255;
-    resultImage.data[i + 1] = 255;
-    resultImage.data[i + 2] = 255;
-    resultImage.data[i + 3] = 255;
-  }
+  graph.init(size, nails);
+  graph.setupImageData(source, colorMode);
 
-  if (!colorMode) {
-    ui.status.textContent = 'Génération noir et blanc...';
-    const gray = toGray(source);
-    const instr = await generateChannel(gray, size, state.nailPoints, lines, lineWeight, 'noir', resultImage.data, 0);
-    if (!state.cancel) {
-      for (let i = 0; i < resultImage.data.length; i += 4) {
-        resultImage.data[i + 1] = resultImage.data[i];
-        resultImage.data[i + 2] = resultImage.data[i];
-      }
-      state.instructions.push(...instr);
-    }
-  } else {
-    const split = Math.max(1, Math.floor(lines / 3));
-    const channels = [
-      { name: 'rouge', idx: 0, data: channelData(source, 0), p: 15 },
-      { name: 'vert', idx: 1, data: channelData(source, 1), p: 45 },
-      { name: 'bleu', idx: 2, data: channelData(source, 2), p: 75 },
-    ];
-    for (const ch of channels) {
-      ui.progress.value = ch.p;
-      ui.status.textContent = `Génération ${ch.name}...`;
-      const instr = await generateChannel(ch.data, size, state.nailPoints, split, lineWeight, ch.name, resultImage.data, ch.idx);
-      if (state.cancel) break;
-      state.instructions.push(...instr);
+  state.nailPoints = graph.nailsPos;
+  ui.resultCanvas.width = size;
+  ui.resultCanvas.height = size;
+  ui.schemaCanvas.width = size;
+  ui.schemaCanvas.height = size;
+  ui.animationCanvas.width = size;
+  ui.animationCanvas.height = size;
+
+  for (let i = 0; i < lines; i += 1) {
+    if (state.cancel) break;
+    const ok = graph.step();
+    if (!ok) break;
+    if (i % 8 === 0) {
+      ui.progress.value = Math.floor((i / lines) * 100);
+      await new Promise((r) => setTimeout(r, 0));
     }
   }
+
+  state.instructions = graph.instructions;
 
   if (!state.cancel) {
-    resultCtx.putImageData(resultImage, 0, 0);
+    drawResult(size);
     drawSchema(size);
     renderInstructionsList();
     ui.progress.value = 100;
     ui.status.textContent = `Terminé: ${state.instructions.length} fils.`;
+    ui.progressInput.max = String(state.instructions.length);
+    resetAnimation();
   } else {
     ui.status.textContent = 'Génération annulée.';
   }
@@ -265,9 +528,8 @@ async function generate() {
 }
 
 function exportPng() {
-  const url = state.resultCanvas.toDataURL('image/png');
   const a = document.createElement('a');
-  a.href = url;
+  a.href = ui.resultCanvas.toDataURL('image/png');
   a.download = 'string-art-result.png';
   a.click();
 }
@@ -291,11 +553,8 @@ function exportPdf() {
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
   pdf.setFontSize(14);
   pdf.text('String Art - Plan de réalisation', 40, 40);
-
-  const schema = state.schemaCanvas.toDataURL('image/png');
-  const result = state.resultCanvas.toDataURL('image/png');
-  pdf.addImage(schema, 'PNG', 40, 60, 240, 240);
-  pdf.addImage(result, 'PNG', 310, 60, 240, 240);
+  pdf.addImage(ui.schemaCanvas.toDataURL('image/png'), 'PNG', 40, 60, 240, 240);
+  pdf.addImage(ui.resultCanvas.toDataURL('image/png'), 'PNG', 310, 60, 240, 240);
 
   let y = 330;
   pdf.setFontSize(10);
@@ -307,7 +566,6 @@ function exportPdf() {
     pdf.text(`${String(i + 1).padStart(4, '0')}. Clou ${s.start} -> Clou ${s.end} (${s.color})`, 40, y);
     y += 12;
   });
-
   pdf.save('string-art-plan.pdf');
 }
 
@@ -336,13 +594,13 @@ ui.imageInput.addEventListener('change', (e) => {
 document.querySelectorAll('.preset-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     const p = btn.dataset.preset;
-    const map = {
-      fast: { nails: 120, lines: 600, size: 540, lw: 18, color: false },
-      balanced: { nails: 160, lines: 900, size: 700, lw: 16, color: false },
-      detailed: { nails: 220, lines: 1800, size: 900, lw: 12, color: false },
-      color: { nails: 180, lines: 1200, size: 800, lw: 14, color: true },
+    const presets = {
+      fast: { nails: 120, lines: 600, size: 560, lw: 18, color: false },
+      balanced: { nails: 180, lines: 1200, size: 760, lw: 16, color: false },
+      detailed: { nails: 240, lines: 2200, size: 920, lw: 12, color: false },
+      color: { nails: 200, lines: 1500, size: 820, lw: 14, color: true },
     };
-    const v = map[p];
+    const v = presets[p];
     if (!v) return;
     ui.nails.value = v.nails;
     ui.lines.value = v.lines;
@@ -359,4 +617,21 @@ ui.exportPngBtn.addEventListener('click', exportPng);
 ui.exportTxtBtn.addEventListener('click', exportTxt);
 ui.exportPdfBtn.addEventListener('click', exportPdf);
 
+ui.playBtn.addEventListener('click', () => {
+  if (!state.instructions.length) return;
+  if (state.anim.index >= state.instructions.length) resetAnimation();
+  if (!state.anim.running) {
+    state.anim.running = true;
+    requestAnimationFrame(tickAnimation);
+  }
+});
+ui.pauseBtn.addEventListener('click', () => { state.anim.running = false; });
+ui.resetBtn.addEventListener('click', resetAnimation);
+ui.progressInput.addEventListener('input', (e) => {
+  state.anim.running = false;
+  state.anim.index = constrain(Number(e.target.value) || 0, 0, state.instructions.length);
+  drawAnimationFrame(state.anim.index);
+});
+
 refreshSummary();
+resetAnimation();
