@@ -14,6 +14,26 @@
       <p class="subtitle">Nouvelle version 100% navigateur : rendu réaliste + animation fil par fil + exports pour reproduire facilement en vrai.</p>
     </header>
 
+    <section class="card track-menu-card">
+      <h2>Programme lycée par filière</h2>
+      <p class="help">Nouveau : choisissez la voie, la filière et le niveau pour afficher les chapitres réellement étudiés.</p>
+      <div class="grid">
+        <label>Voie
+          <select id="track-pathway"></select>
+        </label>
+        <label>Filière
+          <select id="track-major"></select>
+        </label>
+        <label>Niveau
+          <select id="track-grade"></select>
+        </label>
+      </div>
+      <div class="summary-box">
+        <strong>Chapitres du parcours sélectionné :</strong>
+        <ul id="track-topics" class="topics-list"></ul>
+      </div>
+    </section>
+
     <section class="card form-card">
       <div class="field-block">
         <label for="image-input">Image source</label>
