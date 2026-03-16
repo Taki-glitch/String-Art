@@ -358,6 +358,14 @@ function refreshSummary() {
   ui.summaryText.textContent = `${ui.nails.value} clous · ${ui.lines.value} fils · ${ui.size.value}px · épaisseur ${ui.lineWeight.value}${c}`;
 }
 
+function ensureSingleTrackMenu() {
+  const menus = document.querySelectorAll('.track-menu-card');
+  if (menus.length <= 1) return;
+  menus.forEach((menu, index) => {
+    if (index > 0) menu.remove();
+  });
+}
+
 function fillSelect(select, entries) {
   select.innerHTML = '';
   entries.forEach(([value, label]) => {
@@ -746,5 +754,6 @@ ui.progressInput.addEventListener('input', (e) => {
 });
 
 refreshSummary();
+ensureSingleTrackMenu();
 initTrackMenus();
 resetAnimation();
