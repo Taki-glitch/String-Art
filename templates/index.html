@@ -14,7 +14,7 @@
     </header>
 
 
-    <section class="card track-menu-card">
+    <section class="card">
       <h2>Programme lycée par filière</h2>
       <p class="help">Choisissez la voie, la filière et le niveau pour afficher les chapitres associés.</p>
       <div class="grid">
@@ -259,14 +259,6 @@
       },
     };
 
-    function ensureSingleTrackMenu() {
-      const menus = document.querySelectorAll('.track-menu-card');
-      if (menus.length <= 1) return;
-      menus.forEach((menu, index) => {
-        if (index > 0) menu.remove();
-      });
-    }
-
     function fillSelect(select, entries) {
       if (!select) return;
       select.innerHTML = '';
@@ -359,7 +351,6 @@
     });
 
     refreshSummary();
-    ensureSingleTrackMenu();
     initTrackMenus();
 
     const canvas = document.getElementById('animation-canvas');
