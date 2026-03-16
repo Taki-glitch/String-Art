@@ -210,6 +210,68 @@ const ui = {
   pauseBtn: document.getElementById('pause-btn'),
   resetBtn: document.getElementById('reset-btn'),
   animationStatus: document.getElementById('animation-status'),
+  trackPathway: document.getElementById('track-pathway'),
+  trackMajor: document.getElementById('track-major'),
+  trackGrade: document.getElementById('track-grade'),
+  trackTopics: document.getElementById('track-topics'),
+};
+
+const schoolTracks = {
+  general: {
+    label: 'Voie générale',
+    majors: {
+      general: {
+        label: 'Général',
+        grades: {
+          seconde: ['Fonctions et variations', 'Statistiques descriptives', 'Probabilités', 'Géométrie repérée'],
+          premiere: ['Fonctions polynômes et dérivées', 'Suites numériques', 'Loi binomiale', 'Trigonométrie'],
+          terminale: ['Limites et continuité', 'Intégration', 'Variables aléatoires', 'Algorithmique et Python'],
+        },
+      },
+    },
+  },
+  techno: {
+    label: 'Voie technologique',
+    majors: {
+      stmg: {
+        label: 'STMG',
+        grades: {
+          seconde: ['Proportionnalité et pourcentages', 'Équations du 1er degré', 'Lecture de données économiques'],
+          premiere: ['Indicateurs statistiques', 'Évolution et taux', 'Probabilités conditionnelles', 'Tableurs et simulation'],
+          terminale: ['Suites appliquées à la gestion', 'Prise de décision sous incertitude', 'Graphes et optimisation'],
+        },
+      },
+      st2s: {
+        label: 'ST2S',
+        grades: {
+          seconde: ['Calculs de doses et échelles', 'Statistiques de santé', 'Tableaux et graphiques'],
+          premiere: ['Fonctions usuelles en contexte sanitaire', 'Probabilités pour le risque', 'Variabilité biologique'],
+          terminale: ['Intervalles de confiance', 'Tests statistiques simples', 'Modélisation de phénomènes de santé'],
+        },
+      },
+    },
+  },
+  pro: {
+    label: 'Voie professionnelle',
+    majors: {
+      assp: {
+        label: 'ASSP',
+        grades: {
+          seconde: ['Grandeurs et conversions', 'Organisation des données', 'Calculs de proportion'],
+          premiere: ['Dosages et débits', 'Tableaux de suivi', 'Géométrie appliquée aux espaces professionnels'],
+          terminale: ['Lecture d’indicateurs qualité', 'Statistiques en situation professionnelle', 'Résolution de problèmes concrets'],
+        },
+      },
+      metiers: {
+        label: 'Métiers de la production/services',
+        grades: {
+          seconde: ['Calcul numérique appliqué', 'Unités et mesures', 'Représentations graphiques'],
+          premiere: ['Fonctions en contexte métier', 'Proportionnalité avancée', 'Probabilités simples'],
+          terminale: ['Optimisation de coûts', 'Contrôle qualité', 'Algorithmique métier'],
+        },
+      },
+    },
+  },
 };
 
 const graph = {
@@ -294,6 +356,56 @@ const graph = {
 function refreshSummary() {
   const c = ui.colorMode.checked ? ' · mode couleur' : '';
   ui.summaryText.textContent = `${ui.nails.value} clous · ${ui.lines.value} fils · ${ui.size.value}px · épaisseur ${ui.lineWeight.value}${c}`;
+}
+
+function fillSelect(select, entries) {
+  select.innerHTML = '';
+  entries.forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    select.appendChild(option);
+  });
+}
+
+function refreshTrackTopics() {
+  if (!ui.trackPathway || !ui.trackMajor || !ui.trackGrade || !ui.trackTopics) return;
+  const pathway = schoolTracks[ui.trackPathway.value];
+  const major = pathway?.majors?.[ui.trackMajor.value];
+  const topics = major?.grades?.[ui.trackGrade.value] || [];
+  ui.trackTopics.innerHTML = '';
+  topics.forEach((topic) => {
+    const li = document.createElement('li');
+    li.textContent = topic;
+    ui.trackTopics.appendChild(li);
+  });
+}
+
+function refreshTrackGrades() {
+  if (!ui.trackPathway || !ui.trackMajor || !ui.trackGrade) return;
+  const pathway = schoolTracks[ui.trackPathway.value];
+  const major = pathway?.majors?.[ui.trackMajor.value];
+  const grades = Object.keys(major?.grades || {}).map((grade) => [grade, grade[0].toUpperCase() + grade.slice(1)]);
+  fillSelect(ui.trackGrade, grades);
+  refreshTrackTopics();
+}
+
+function refreshTrackMajorsAndGrades() {
+  if (!ui.trackPathway || !ui.trackMajor || !ui.trackGrade) return;
+  const pathway = schoolTracks[ui.trackPathway.value];
+  const majors = Object.entries(pathway.majors).map(([value, item]) => [value, item.label]);
+  fillSelect(ui.trackMajor, majors);
+  refreshTrackGrades();
+}
+
+function initTrackMenus() {
+  if (!ui.trackPathway || !ui.trackMajor || !ui.trackGrade || !ui.trackTopics) return;
+  const pathways = Object.entries(schoolTracks).map(([value, item]) => [value, item.label]);
+  fillSelect(ui.trackPathway, pathways);
+  refreshTrackMajorsAndGrades();
+  ui.trackPathway.addEventListener('change', refreshTrackMajorsAndGrades);
+  ui.trackMajor.addEventListener('change', refreshTrackGrades);
+  ui.trackGrade.addEventListener('change', refreshTrackTopics);
 }
 
 function toGray(data) {
@@ -634,4 +746,5 @@ ui.progressInput.addEventListener('input', (e) => {
 });
 
 refreshSummary();
+initTrackMenus();
 resetAnimation();

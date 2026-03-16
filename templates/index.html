@@ -13,6 +13,27 @@
       <p class="subtitle">Charge une image, choisis les paramètres avec des boutons, visualise le rendu puis exporte en PDF.</p>
     </header>
 
+
+    <section class="card">
+      <h2>Programme lycée par filière</h2>
+      <p class="help">Choisissez la voie, la filière et le niveau pour afficher les chapitres associés.</p>
+      <div class="grid">
+        <label>Voie
+          <select id="track-pathway"></select>
+        </label>
+        <label>Filière
+          <select id="track-major"></select>
+        </label>
+        <label>Niveau
+          <select id="track-grade"></select>
+        </label>
+      </div>
+      <div class="summary-box">
+        <strong>Chapitres du parcours sélectionné :</strong>
+        <ul id="track-topics" class="topics-list"></ul>
+      </div>
+    </section>
+
     <form method="post" action="/generate" enctype="multipart/form-data" class="card form-card">
       <div class="field-block">
         <label for="image-input">Image source</label>
@@ -175,6 +196,118 @@
       summaryText.textContent = `${nailsInput.value} clous · ${linesInput.value} fils · ${sizeInput.value} px · épaisseur ${lineWeightInput.value}${colorText}`;
     }
 
+    const trackPathway = document.getElementById('track-pathway');
+    const trackMajor = document.getElementById('track-major');
+    const trackGrade = document.getElementById('track-grade');
+    const trackTopics = document.getElementById('track-topics');
+
+    const schoolTracks = {
+      general: {
+        label: 'Voie générale',
+        majors: {
+          general: {
+            label: 'Général',
+            grades: {
+              seconde: ['Fonctions et variations', 'Statistiques descriptives', 'Probabilités', 'Géométrie repérée'],
+              premiere: ['Fonctions polynômes et dérivées', 'Suites numériques', 'Loi binomiale', 'Trigonométrie'],
+              terminale: ['Limites et continuité', 'Intégration', 'Variables aléatoires', 'Algorithmique et Python'],
+            },
+          },
+        },
+      },
+      techno: {
+        label: 'Voie technologique',
+        majors: {
+          stmg: {
+            label: 'STMG',
+            grades: {
+              seconde: ['Proportionnalité et pourcentages', 'Équations du 1er degré', 'Lecture de données économiques'],
+              premiere: ['Indicateurs statistiques', 'Évolution et taux', 'Probabilités conditionnelles', 'Tableurs et simulation'],
+              terminale: ['Suites appliquées à la gestion', 'Prise de décision sous incertitude', 'Graphes et optimisation'],
+            },
+          },
+          st2s: {
+            label: 'ST2S',
+            grades: {
+              seconde: ['Calculs de doses et échelles', 'Statistiques de santé', 'Tableaux et graphiques'],
+              premiere: ['Fonctions usuelles en contexte sanitaire', 'Probabilités pour le risque', 'Variabilité biologique'],
+              terminale: ['Intervalles de confiance', 'Tests statistiques simples', 'Modélisation de phénomènes de santé'],
+            },
+          },
+        },
+      },
+      pro: {
+        label: 'Voie professionnelle',
+        majors: {
+          assp: {
+            label: 'ASSP',
+            grades: {
+              seconde: ['Grandeurs et conversions', 'Organisation des données', 'Calculs de proportion'],
+              premiere: ['Dosages et débits', 'Tableaux de suivi', 'Géométrie appliquée aux espaces professionnels'],
+              terminale: ['Lecture d’indicateurs qualité', 'Statistiques en situation professionnelle', 'Résolution de problèmes concrets'],
+            },
+          },
+          metiers: {
+            label: 'Métiers de la production/services',
+            grades: {
+              seconde: ['Calcul numérique appliqué', 'Unités et mesures', 'Représentations graphiques'],
+              premiere: ['Fonctions en contexte métier', 'Proportionnalité avancée', 'Probabilités simples'],
+              terminale: ['Optimisation de coûts', 'Contrôle qualité', 'Algorithmique métier'],
+            },
+          },
+        },
+      },
+    };
+
+    function fillSelect(select, entries) {
+      if (!select) return;
+      select.innerHTML = '';
+      entries.forEach(([value, label]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        select.appendChild(option);
+      });
+    }
+
+    function refreshTrackTopics() {
+      if (!trackPathway || !trackMajor || !trackGrade || !trackTopics) return;
+      const pathway = schoolTracks[trackPathway.value];
+      const major = pathway?.majors?.[trackMajor.value];
+      const topics = major?.grades?.[trackGrade.value] || [];
+      trackTopics.innerHTML = '';
+      topics.forEach((topic) => {
+        const li = document.createElement('li');
+        li.textContent = topic;
+        trackTopics.appendChild(li);
+      });
+    }
+
+    function refreshTrackGrades() {
+      const pathway = schoolTracks[trackPathway.value];
+      const major = pathway?.majors?.[trackMajor.value];
+      const grades = Object.keys(major?.grades || {}).map((grade) => [grade, grade[0].toUpperCase() + grade.slice(1)]);
+      fillSelect(trackGrade, grades);
+      refreshTrackTopics();
+    }
+
+    function refreshTrackMajorsAndGrades() {
+      const pathway = schoolTracks[trackPathway.value];
+      const majors = Object.entries(pathway.majors).map(([value, item]) => [value, item.label]);
+      fillSelect(trackMajor, majors);
+      refreshTrackGrades();
+    }
+
+    function initTrackMenus() {
+      if (!trackPathway || !trackMajor || !trackGrade || !trackTopics) return;
+      const pathways = Object.entries(schoolTracks).map(([value, item]) => [value, item.label]);
+      fillSelect(trackPathway, pathways);
+      refreshTrackMajorsAndGrades();
+      trackPathway.addEventListener('change', refreshTrackMajorsAndGrades);
+      trackMajor.addEventListener('change', refreshTrackGrades);
+      trackGrade.addEventListener('change', refreshTrackTopics);
+    }
+
     imageInput?.addEventListener('change', (event) => {
       const [file] = event.target.files;
       if (!file) {
@@ -218,6 +351,7 @@
     });
 
     refreshSummary();
+    initTrackMenus();
 
     const canvas = document.getElementById('animation-canvas');
     const statusEl = document.getElementById('animation-status');
